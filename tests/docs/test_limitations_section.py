@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.metadata import requires
+
 from maskvault import Anonymizer, Level, shannon_entropy
 
 
@@ -33,3 +35,12 @@ class TestLimitationsSection:
     def test_the_quick_brown_fox_figure(self):
         """README: 'the quick brown fox jumps scores above 4 bits'."""
         assert shannon_entropy("the quick brown fox jumps") > 4.0
+
+    def test_it_has_no_dependencies(self):
+        """README: 'No dependencies'. The packaged metadata has to agree.
+
+        Read from the installed distribution rather than from pyproject.toml,
+        because what a user gets is the metadata, and because tomllib is only
+        in the standard library from 3.11 while this package supports 3.10.
+        """
+        assert not requires("maskvault")
