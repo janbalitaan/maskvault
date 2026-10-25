@@ -77,3 +77,53 @@ class TestEntropy:
     def test_duplicates_are_reported_once(self):
         secret = "aGVsbG8gd29ybGQgdGhpcyBpcyBzZWNyZXQ="
         assert len(Entropy.find_secrets(f"{secret} and again {secret}")) == 1
+
+
+class TestVerdictReporting:
+    """`find_secrets` returns a verdict per candidate, which is what makes a
+    threshold adjustable from evidence rather than from guesswork."""
+
+    def test_it_reports_a_verdict_for_a_real_secret(self):
+        verdicts = Entropy.find_secrets("token=" + "aB3dE5fG7hJ9kL1mN3pQ5rS7")
+        assert verdicts
+        assert any(verdict.is_secret for verdict in verdicts)
+
+    def test_a_verdict_carries_the_measurements(self):
+        verdicts = Entropy.find_secrets("aB3dE5fG7hJ9kL1mN3pQ5rS7")
+        verdict = verdicts[0]
+        assert verdict.entropy > 0
+        assert verdict.character_classes > 0
+        assert verdict.alphabet
+        assert verdict.reason
+
+    def test_prose_yields_no_secret_verdict(self):
+        verdicts = Entropy.find_secrets("the quick brown fox jumps over it")
+        assert not any(verdict.is_secret for verdict in verdicts)
+
+
+class TestWhyACandidateWasSpared:
+    """Each condition rejects on its own, and the verdict says which — so a
+    threshold can be adjusted from evidence rather than by trial and error."""
+
+    def test_find_secrets_returns_only_secrets(self):
+        """The name is the contract: a spared candidate is absent rather than
+        present with is_secret false. `classify` is what explains one."""
+        assert Entropy.find_secrets("abcdefghijklmnopqrstuvwxyzabcd") == []
+
+    def test_classify_explains_a_candidate_that_was_spared(self):
+        """Which is the method to reach for when adjusting a threshold: it
+        reports the measurements and the reason for any candidate, secret or
+        not."""
+        verdict = Entropy.classify("abcdefghijklmnopqrstuvwxyzabcd")
+        assert not verdict.is_secret
+        assert verdict.reason
+        assert verdict.entropy > 0
+
+    def test_a_hex_digest_is_not_rejected_for_being_single_class(self):
+        verdicts = Entropy.find_secrets("d41d8cd98f00b204e9800998ecf8427e")
+        assert verdicts
+        assert verdicts[0].alphabet == "hex"
+
+    def test_a_short_candidate_is_not_judged_at_all(self):
+        """Below the minimum, entropy is too noisy to act on."""
+        assert Entropy.find_secrets("short") == []

@@ -55,15 +55,23 @@ class Levels:
             detector for detector in DEFAULT_DETECTORS if detector.action is Action.REVERSIBLE
         )
         # Order is the whole correctness story here, because the first detector
-        # to match a span claims it. Precise formats come before keyword-led
-        # ones: an email address is unambiguous, while the social-handle detector
-        # is "a platform name followed by something", which would otherwise claim
-        # the domain half of an address.
+        # to match a span claims it.
+        #
+        # Precise before loose: `ip_address` has an exact shape while `phone`
+        # matches any punctuated digit run and decides in code, so an address
+        # like 10.42.7.19 is claimed by phone unless the precise one runs
+        # first. Both are reversible, so the value survived either way — but
+        # the label was wrong, and a caller whitelisting "ip_address" found it
+        # had no effect.
+        #
+        # Then precise before keyword-led: an email address is unambiguous,
+        # while the social-handle detector is "a platform name followed by
+        # something", which would otherwise claim the domain half of one.
         standard = (
             VENDOR_CREDENTIALS
             + Levels._credentials_only()[len(VENDOR_CREDENTIALS) :]
-            + contact
             + PERSONAL_DATA
+            + contact
             + STRUCTURED_PERSONAL
         )
 

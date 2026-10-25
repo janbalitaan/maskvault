@@ -84,8 +84,14 @@ class TokenFormat:
 
     @property
     def example(self) -> str:
-        """What a token looks like in this format, for documentation."""
-        return self.render("LABEL", 1)
+        """What a token looks like in this format, for documentation.
+
+        Composed the same way a real token is — `label_for` then `render` —
+        because `render` writes exactly what it is given. Skipping the casing
+        here advertised `<LABEL_1>` for a format whose tokens were actually
+        `<label_1>`, which is the one thing an example must not do.
+        """
+        return self.render(self.label_for("LABEL"), 1)
 
     @property
     def pattern(self) -> re.Pattern[str]:
@@ -116,7 +122,12 @@ class TokenFormat:
         return label
 
     def render(self, label: str, index: int) -> str:
-        """Write one token.
+        """Write one token, with the label exactly as given.
+
+        Casing is `label_for`'s job, and a caller composes the two:
+        `render(label_for(label), index)`. Kept apart so a caller who has
+        already cased a label does not get it cased twice, and so this stays
+        a primitive that does one thing.
 
         Built by concatenation rather than str.format, because a delimiter
         containing braces would otherwise be eaten as format escaping: a

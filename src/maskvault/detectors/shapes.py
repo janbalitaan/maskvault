@@ -6,8 +6,18 @@ import re
 
 from maskvault.constants import PHONE_MAX_DIGITS, PHONE_MIN_DIGITS
 
-# ISO-8601-ish dates are all over a CV and are not phone numbers.
-_ISO_DATE = re.compile(r"^\d{4}-\d{1,2}(-\d{1,2})?$")
+# Dates and times are everywhere in a log and a CV, and none of them are
+# phone numbers. Searched rather than anchored: an anchored pattern only
+# rejects a date standing alone, so `2026-10-25 14:02:11` slipped through as
+# a ten-digit run and a log line came back as `@@PHONE_1@@:02:11`.
+_DATE_OR_TIME = re.compile(
+    r"""
+      \d{4}-\d{1,2}-\d{1,2}      # 2026-10-25
+    | \d{1,2}:\d{2}              # 14:02
+    | ^\d{4}-\d{1,2}$            # 2026-10
+    """,
+    re.VERBOSE,
+)
 
 
 class PhoneShape:
@@ -24,7 +34,7 @@ class PhoneShape:
     def looks_like_a_phone_number(candidate: str) -> bool:
         """Return whether a digit run is plausibly a phone number."""
         stripped = candidate.strip(" .,;:")
-        if _ISO_DATE.match(stripped):
+        if _DATE_OR_TIME.search(stripped):
             return False
         digits = sum(character.isdigit() for character in stripped)
         return PHONE_MIN_DIGITS <= digits <= PHONE_MAX_DIGITS

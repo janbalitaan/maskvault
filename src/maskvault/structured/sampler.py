@@ -27,7 +27,13 @@ class TextSampler:
 
     @property
     def full(self) -> bool:
-        """Whether enough text has been gathered to decide."""
+        """Whether enough text has been gathered to decide.
+
+        The budget is a bound on work, not an exact length: a value is added
+        whole, so the total can exceed the limit by the size of the last one.
+        Truncating mid-value would save nothing worth the loss of a delimiter
+        that happened to straddle the cut.
+        """
         return self._size >= self._limit
 
     def text(self) -> str:
@@ -62,11 +68,19 @@ class TextSampler:
         self._size += len(value)
 
     def _collect_mapping(self, node: Mapping, depth: int) -> None:
+        # The `full` check belongs here as well as in `collect`, because a key
+        # is added directly rather than through it. Without this, a mapping
+        # with many keys kept adding every one of them after the limit was
+        # reached — a thousand-character budget collected 1294.
         for key, value in node.items():
+            if self.full:
+                return
             if isinstance(key, str):
                 self._add(key)
             self.collect(value, depth + 1)
 
     def _collect_sequence(self, node: Sequence | set | frozenset, depth: int) -> None:
         for item in node:
+            if self.full:
+                return
             self.collect(item, depth + 1)

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
 from maskvault import Anonymizer, Whitelist
+from maskvault.exceptions import WhitelistError
 
 
 class TestPatternsAndPredicate:
@@ -19,5 +22,10 @@ class TestPatternsAndPredicate:
         assert "me@other.com" not in safe
 
     def test_a_predicate_has_no_json_form(self):
-        """A config file must not be able to introduce executable code."""
-        assert Whitelist.from_dict({"predicate": "lambda v: True"}).predicate is None
+        """A config file must not be able to introduce executable code.
+
+        It used to be ignored, which meant a config carrying a predicate
+        silently had none. Refusing says so, and names where to pass it
+        instead."""
+        with pytest.raises(WhitelistError, match="no JSON form"):
+            Whitelist.from_dict({"predicate": "lambda v: True"})

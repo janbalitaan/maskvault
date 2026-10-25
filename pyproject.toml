@@ -30,6 +30,9 @@ classifiers = [
 # privacy filter nobody can audit.
 dependencies = []
 
+[project.scripts]
+maskvault = "maskvault.cli:run"
+
 [project.urls]
 Homepage = "https://github.com/janbalitaan/maskvault"
 Documentation = "https://github.com/janbalitaan/maskvault#readme"
@@ -82,3 +85,7 @@ addopts = "-q --strict-markers"
 [tool.coverage.run]
 source = ["src/maskvault"]
 branch = true
+# Runs at import, so it only executes in the subprocess that tests
+# `python -m maskvault` — where this process cannot measure it. The test
+# asserting it works is in tests/cli/test_policy_and_entry_points.py.
+omit = ["src/maskvault/__main__.py"]

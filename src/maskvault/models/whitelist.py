@@ -30,10 +30,17 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from difflib import get_close_matches
 import re
 from typing import ClassVar
 
-from maskvault.constants import TRAILING_PUNCTUATION
+from maskvault.constants import (
+    IGNORED_KEYS,
+    JSON_KEYS,
+    KEY_ALIASES,
+    REFUSED_KEYS,
+    TRAILING_PUNCTUATION,
+)
 from maskvault.exceptions import WhitelistError
 
 
@@ -130,9 +137,15 @@ class Whitelist:
 
         `predicate` has no JSON form, by design — a config file should not be
         able to introduce executable code.
+
+        An unrecognized key raises rather than being ignored. A typo like
+        `regexes` for `patterns` would otherwise leave the whitelist quietly
+        not applying, and the developer debugging why their value was still
+        replaced has no way to see that the key was never read.
         """
         if not data:
             return cls()
+        cls._check_keys(data)
         return cls(
             labels=set(data.get("labels") or []),
             categories=set(data.get("categories") or []),
@@ -143,6 +156,32 @@ class Whitelist:
             suffixes=tuple(data.get("suffixes") or []),
             domains=set(data.get("domains") or []),
             patterns=cls._compile_patterns(data.get("patterns") or []),
+        )
+
+    @classmethod
+    def _check_keys(cls, data: dict) -> None:
+        """Raise when a key will not be read, naming the nearest real one."""
+        refused = sorted(set(data) & set(REFUSED_KEYS))
+        if refused:
+            reasons = "; ".join(f"{key!r}: {REFUSED_KEYS[key]}" for key in refused)
+            raise WhitelistError(f"this whitelist key has no JSON form — {reasons}")
+
+        unknown = sorted(set(data) - JSON_KEYS - IGNORED_KEYS)
+        if not unknown:
+            return
+        guesses = []
+        for key in unknown:
+            suggestion = KEY_ALIASES.get(key.lower()) or next(
+                iter(get_close_matches(key, sorted(JSON_KEYS), n=1, cutoff=0.6)), None
+            )
+            guesses.append(
+                f"{key!r}" + (f" (did you mean {suggestion!r}?)" if suggestion else "")
+            )
+        raise WhitelistError(
+            "unrecognized whitelist key: "
+            + ", ".join(guesses)
+            + ". Recognized keys are: "
+            + ", ".join(sorted(JSON_KEYS))
         )
 
     @staticmethod

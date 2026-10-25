@@ -92,3 +92,61 @@ MAX_STRUCTURE_DEPTH = 64
 # a few kilobytes is a representative sample of any structure — walking a
 # large one in full would cost more than the choice is worth.
 SAMPLE_LIMIT = 4096
+
+# Names a developer plausibly reaches for, mapped to the real key. String
+# similarity alone suggests "prefixes" for "regexes", which sends someone to
+# the wrong mechanism — so the cases where distance misleads are listed.
+KEY_ALIASES = {
+    "regex": "patterns",
+    "regexes": "patterns",
+    "regexps": "patterns",
+    "pattern": "patterns",
+    "label": "labels",
+    "value": "values",
+    "word": "words",
+    "domain": "domains",
+    "category": "categories",
+    "categorys": "categories",
+    "allow": "values",
+    "allowlist": "values",
+    "exact": "values",
+    "substring": "contains",
+    "substrings": "contains",
+    "startswith": "prefixes",
+    "endswith": "suffixes",
+}
+
+# Keys a config file may carry that are read but hold no policy. `note` is
+# here because `suggest_whitelist` emits one and its output is documented as
+# usable as config — and because JSON has no comments, so a config file has
+# nowhere else to explain itself.
+IGNORED_KEYS = frozenset({"note", "notes", "comment", "_comment", "description"})
+
+# Keys that are recognized and deliberately refused, with the reason. A
+# generic "unrecognized key" would send someone looking for a typo when the
+# real answer is that the mechanism does not exist in JSON on purpose.
+REFUSED_KEYS = {
+    "predicate": (
+        "a predicate takes a callable, and a config file should not be able "
+        "to introduce executable code. Pass it to Whitelist(predicate=...) "
+        "in Python instead"
+    ),
+}
+
+# The whitelist keys a config file may use. `predicate` is absent on purpose:
+# it takes a callable, and a config file should not be able to introduce
+# executable code. Kept here so the set a reader sees and the set the code
+# checks are the same one.
+JSON_KEYS = frozenset(
+    {
+        "labels",
+        "categories",
+        "values",
+        "words",
+        "contains",
+        "prefixes",
+        "suffixes",
+        "domains",
+        "patterns",
+    }
+)

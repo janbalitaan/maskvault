@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level
+from maskvault.detectors import Registry
 from maskvault.levels import Levels
 
 CREDENTIAL = "AKIAIOSFODNN7EXAMPLE"
@@ -43,3 +44,16 @@ class TestOrderingAndComposition:
 
     def test_the_level_is_reported(self):
         assert "strict" in Anonymizer(level=Level.STRICT).describe_policy()
+
+
+class TestRegistryWithoutEntropy:
+    """The net is optional, because a caller who has their own detectors may
+    not want a generic one firing on their identifiers."""
+
+    def test_entropy_is_included_by_default(self):
+        assert any(detector.label == "high_entropy" for detector in Registry.all_detectors())
+
+    def test_it_can_be_left_out(self):
+        labels = [d.label for d in Registry.all_detectors(include_entropy=False)]
+        assert "high_entropy" not in labels
+        assert labels, "the rest of the detectors should still be there"
