@@ -28,6 +28,7 @@ from maskvault.models.substitution import Substitution
 from maskvault.models.token_format import TokenFormat
 from maskvault.models.vault import Vault
 from maskvault.models.whitelist import Whitelist
+from maskvault.patterns import NOTICE as _NOTICE
 
 
 class Anonymizer:
@@ -168,6 +169,13 @@ class Anonymizer:
 
         Findings include values the whitelist already allows, marked as such,
         so a developer can see the policy working rather than inferring it.
+
+        Overlaps are resolved the way `anonymize` resolves them, so the two
+        agree. Reporting every detector's matches independently counted a
+        value twice whenever two patterns claimed the same span — an IP
+        address is also a punctuated digit run, so `explain` said nine where
+        `anonymize` replaced six, and the number a developer read was not the
+        number they would get.
         """
         findings: list[Finding] = []
         for label, pattern in self._terms:
@@ -180,9 +188,36 @@ class Anonymizer:
             )
         for detector in self._detectors:
             findings.extend(self._find(text, detector))
+        return self._resolve_overlaps(findings)
+
+    @staticmethod
+    def _resolve_overlaps(findings: list[Finding]) -> list[Finding]:
+        """Keep one finding per span, picking the same winner substitution does.
+
+        Substitution runs each detector over the text in turn, so the one
+        earliest in the detector list claims a span — not the one that starts
+        earliest in the text. `findings` arrives in detector order, so walking
+        it in that order and skipping anything overlapping an earlier claim
+        gives the same answer.
+
+        Getting this backwards is subtle: sorting by position first reports
+        `high_entropy` for a Stripe key, because the entropy candidate starts
+        a few characters earlier while `stripe_key` is the detector that
+        actually replaces it.
+        """
+        kept: list[Finding] = []
+        claimed: list[tuple[int, int]] = []
+        for finding in findings:
+            overlaps = any(
+                finding.start < end and start < finding.end for start, end in claimed
+            )
+            if overlaps:
+                continue
+            kept.append(finding)
+            claimed.append((finding.start, finding.end))
         # Earliest first, so the report reads in the order of the text.
-        findings.sort(key=lambda finding: (finding.start, finding.label))
-        return findings
+        kept.sort(key=lambda finding: (finding.start, finding.label))
+        return kept
 
     def preview(self, text: str) -> str:
         """Render what would happen. For a terminal, not a log.
@@ -301,6 +336,8 @@ class Anonymizer:
         def swap(match: re.Match[str]) -> str:
             whole = match.group(0)
             original = rule.value_of(match)
+            if self._is_own_output(original):
+                return whole
             if not original or self._whitelist.allows_value(original):
                 return whole
             if rule.validator is not None and not rule.validator(original):
@@ -320,11 +357,40 @@ class Anonymizer:
 
         return rule.pattern.sub(swap, text)
 
+    def _is_own_output(self, candidate: str) -> bool:
+        """Whether a candidate is something this anonymizer already inserted.
+
+        Detectors run one after another over progressively replaced text, so a
+        later detector sees the tokens and notices the earlier ones left
+        behind. At PARANOID — a lower entropy bar and symbols in the alphabet
+        — `@@IP_ADDRESS_1@@` measures as a high-entropy value and was
+        destroyed, which lost the original permanently and left a vault whose
+        tokens no longer appeared in the text. Restoring could never work.
+
+        Checked before the whitelist, because this is not a policy decision a
+        caller should have to make: replacing a replacement is never what
+        anyone wanted.
+        """
+        if not candidate:
+            return False
+        # Searched, not fullmatched. A candidate often *contains* a token
+        # rather than equalling one: the paranoid entropy pattern took
+        # `user=@@EMAIL_1@@` as a single run, so an exact comparison let it
+        # through and the token inside was destroyed with the rest.
+        if self._active_format.pattern.search(candidate):
+            return True
+        # A notice is prose in brackets, and the only prose this library puts
+        # into the text. Matching the shape rather than the exact strings
+        # keeps a caller's custom notice covered too.
+        return bool(_NOTICE.search(candidate))
+
     def _destroy(self, text: str, detector: Detector, vault: Vault) -> str:
         """Remove a value that must never be sent or restored."""
 
         def swap(match: re.Match[str]) -> str:
             original = match.group(0)
+            if self._is_own_output(original):
+                return original
             if self._whitelist.allows_value(original):
                 return original
             if detector.validate is not None and not detector.validate(original):

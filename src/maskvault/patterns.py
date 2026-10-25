@@ -188,3 +188,14 @@ AGE = re.compile(r"(?i)\b(?:i\s*am|aged?|age\s*[:=]?)\s*(\d{1,3})\s*(?:years?\s*
 # A Vault carries its own format, so this is the fallback for code holding
 # none — a format's own pattern is derived from its delimiters.
 TOKEN = re.compile(TOKEN_REGEX)
+
+
+# ---------------------------------------------------------------------------
+# This library's own output
+# ---------------------------------------------------------------------------
+
+# A destruction notice: prose in square brackets. Detectors run over
+# progressively replaced text, so a later one sees what an earlier one left
+# behind, and matching the shape stops it claiming a notice as a new value.
+# A caller's custom notice is covered as long as it keeps the bracket form.
+NOTICE = re.compile(r"\[[a-z][^\[\]]{10,}\]")
