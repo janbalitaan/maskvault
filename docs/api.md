@@ -74,7 +74,7 @@ rather than the caller needing a branch at every call site.
 Vault(values={}, destroyed=[], token_format=..., scope="")
 Vault.scoped()          # tokens carry a random marker; see docs/stores.md
 Vault.for_key(id)       # marker derived from an id you already have unique
-vault.wipe()            # forget every value; returns how many went
+vault.wipe(older_than=…)  # forget values past that age; 0 for all
 vault.wiped             # whether it has been emptied
 ```
 

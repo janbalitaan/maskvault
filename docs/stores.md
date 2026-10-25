@@ -231,7 +231,7 @@ else is an option on top.
 | `store.delete(key)` | one vault | immediately |
 | `store.purge()` | expired entries | when you call it |
 | `store.clear()` | everything in memory | immediately |
-| `vault.wipe()` | the object in hand | immediately |
+| `vault.wipe(older_than=…)` | values past that age | immediately; default 900s, `0` for all |
 
 **The TTL is the real control.** Fifteen minutes by default, because a
 request-and-reply cycle is seconds and a conversation is minutes. Set it to
@@ -246,14 +246,34 @@ has no native expiry, so `DatabaseVaultStore.purge()` is what reclaims
 expired rows, from a cron, a startup hook or a periodic task. An unswept
 table of vaults is a growing pile of plaintext nobody is using.
 
-**`vault.wipe()` ends the object.** For the single-turn flow where the vault
-is finished the moment the reply is restored:
+**`vault.wipe()` forgets by age, not all at once.** A long conversation keeps
+needing its recent values while the ones from twenty turns ago are finished,
+and an all-or-nothing wipe would force a choice between leaving plaintext
+around and breaking a request still in flight:
+
+```python
+vault.wipe()                  # anything older than 15 minutes
+vault.wipe(older_than=60)     # anything older than a minute
+vault.wipe(older_than=0)      # everything, finished or not
+```
+
+The default matches the store TTL, so a vault in memory and a vault in a
+cache age out together rather than one outliving the other by accident.
+
+For the single-turn flow, where the vault is finished the moment the reply is
+restored, say so explicitly:
 
 ```python
 restored = anonymizer.restore(reply, vault)
-vault.wipe()                      # the object in hand
+vault.wipe(older_than=0)          # the object in hand
 store.delete(conversation_id)     # and the stored copy
 ```
+
+The ages travel with the vault, so a wipe after a trip through Redis or a
+table still forgets the right things. A vault written by a version that did
+not record them treats its values as **new** rather than old: keeping data a
+few minutes too long is a smaller fault than forgetting what a live request
+needs.
 
 Both, because they are separate copies — wiping the object does not reach the
 store, and deleting from the store does not reach the object.

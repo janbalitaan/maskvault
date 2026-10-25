@@ -75,8 +75,15 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
-- `Vault.wipe()`, which forgets every value a vault holds and reports how
-  many went. `restore()` deliberately does not empty a vault, because a
+- `Vault.wipe(older_than=...)`, which forgets the values a vault has
+  finished with and reports how many went. Selective by age rather than
+  all-or-nothing, because a long conversation keeps needing its recent values
+  while the ones from twenty turns ago are done — an all-or-nothing wipe
+  forces a choice between leaving plaintext around and breaking a request
+  still in flight. The default is fifteen minutes, matching the store TTL;
+  `older_than=0` forgets everything, for a single-turn request. Mint times
+  travel with the vault, so a wipe after a trip through a cache or a table
+  still forgets the right things. `restore()` deliberately does not empty a vault, because a
   multi-turn conversation needs the same tokens to mean the same people next
   turn — so a vault outlives its use unless something ends it, and until
   then it is plaintext in memory or in a store. Retention is still governed

@@ -176,3 +176,13 @@ SCOPE_LETTERS = 12
 # provider call and a follow-up, short enough that a forgotten entry does not
 # sit in memory for the life of the process.
 VAULT_TTL_SECONDS = 15 * 60
+
+# How old a value has to be before `Vault.wipe()` forgets it. The same fifteen
+# minutes as the store TTL, so a vault in memory and a vault in a cache age
+# out together rather than one outliving the other by accident.
+#
+# Age rather than all-or-nothing, because a long conversation keeps needing
+# its recent values while the ones from twenty turns ago are finished. A
+# caller who wants the old behaviour passes `older_than=0`, which forgets
+# everything.
+WIPE_AFTER_SECONDS = 15 * 60

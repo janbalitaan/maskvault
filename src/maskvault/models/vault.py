@@ -12,8 +12,9 @@ import hashlib
 import re
 import string
 import threading
+import time
 
-from maskvault.constants import SCOPE_LETTERS
+from maskvault.constants import SCOPE_LETTERS, WIPE_AFTER_SECONDS
 from maskvault.exceptions import VaultError
 from maskvault.models.token_format import TokenFormat
 from maskvault.scopes import GENERATOR
@@ -51,6 +52,24 @@ class Vault:
         default_factory=dict, repr=False, compare=False, init=False
     )
     _reverse: dict[str, str] = field(
+        default_factory=dict, repr=False, compare=False, init=False
+    )
+
+    # When each token was minted, so `wipe()` can forget the values a
+    # conversation has finished with while keeping the ones it still needs.
+    #
+    # Wall clock rather than monotonic, because a vault crosses process
+    # boundaries — a store, a queue, another node — and monotonic clocks have
+    # a different origin in every process. A monotonic timestamp survived
+    # serialization as a meaningless number, and the vault that came back
+    # treated every value as infinitely old and wiped all of them, which is
+    # exactly the direction that breaks a request still in flight.
+    #
+    # The cost is sensitivity to a clock adjustment. A step backwards makes a
+    # value look newer, so it is kept — safe. A step forwards makes it look
+    # older, so it could be wiped early; NTP steps are milliseconds and a
+    # large jump is rare, and keeping serialization correct matters more.
+    _minted_at: dict[str, float] = field(
         default_factory=dict, repr=False, compare=False, init=False
     )
 
@@ -100,6 +119,7 @@ class Vault:
             )
             self.values[token] = original
             self._reverse[original] = token
+            self._minted_at[token] = time.time()
             return token
 
     def __post_init__(self) -> None:
@@ -249,6 +269,10 @@ class Vault:
         return {
             "values": self.snapshot(),
             "destroyed": list(self.destroyed),
+            # Without these a revived vault cannot tell a value minted a
+            # second ago from one minted an hour ago, and `wipe()` would
+            # forget both.
+            "minted_at": dict(self._minted_at),
             "scope": self.scope,
             "token_format": self.token_format.as_dict(),
         }
@@ -269,12 +293,32 @@ class Vault:
                 "Vault.as_dict(); a payload without it cannot restore anything."
             )
         stored = data.get("token_format")
-        return cls(
+        vault = cls(
             values=dict(data["values"]),
             destroyed=list(data.get("destroyed") or []),
             scope=str(data.get("scope") or ""),
             token_format=(TokenFormat.from_dict(stored) if stored else TokenFormat.default()),
         )
+        vault._adopt_mint_times(data.get("minted_at"))
+        return vault
+
+    def _adopt_mint_times(self, stored: object) -> None:
+        """Take the recorded mint times, or treat the values as new.
+
+        A vault written before these were recorded has none. Treating those
+        values as *new* rather than as old is the deliberate choice: a wipe
+        that forgets too little leaves data around a little longer, while one
+        that forgets too much breaks a request still in flight. Between a
+        privacy cost measured in minutes and a correctness failure, the
+        correctness failure is worse.
+        """
+        now = time.time()
+        times = stored if isinstance(stored, dict) else {}
+        for token in self.values:
+            recorded = times.get(token)
+            self._minted_at[token] = (
+                float(recorded) if isinstance(recorded, (int, float)) else now
+            )
 
     def __getstate__(self) -> dict:
         """Drop the lock so a vault can be pickled.
@@ -325,8 +369,8 @@ class Vault:
         """How many distinct values were tokenized."""
         return len(self.snapshot())
 
-    def wipe(self) -> int:
-        """Forget every value this vault holds, returning how many went.
+    def wipe(self, older_than: float | None = None) -> int:
+        """Forget values older than `older_than` seconds, returning how many went.
 
         A vault holds the originals in plaintext — that is its whole job —
         and `restore()` does not empty it, because a multi-turn conversation
@@ -334,33 +378,52 @@ class Vault:
         vault outlives its use unless something ends it, and until then it is
         confidential data sitting in memory, in a cache, or in a table.
 
-        Call this when the conversation is over and the values are not needed
-        again:
+        **Selective by age**, because a long conversation keeps needing its
+        recent values while the ones from twenty turns ago are finished:
 
-            restored = anonymizer.restore(reply, vault)
-            vault.wipe()
-            store.delete(conversation_id)
+            vault.wipe()            # anything older than 15 minutes
+            vault.wipe(older_than=60)   # anything older than a minute
+            vault.wipe(older_than=0)    # everything, finished or not
 
-        What survives is the scope, the token format and the list of
-        destroyed labels — enough for `summary()` to still describe what
-        happened, with no values in it. What goes is every original and the
-        reverse map, so a later `restore()` resolves nothing rather than
-        resolving wrongly.
+        The default matches the store TTL, so a vault in memory and a vault
+        in a cache age out together rather than one outliving the other by
+        accident. Pass `older_than=0` at the end of a single-turn request,
+        where nothing is needed again.
+
+        What survives is the scope, the token format, the counters and the
+        list of destroyed labels — enough for `summary()` to still describe
+        what happened, with no values in it. The counters survive
+        deliberately: resetting them would let a later mint reuse `EMAIL_1`
+        for a different person, so a token from before the wipe would resolve
+        to the wrong value instead of to nothing.
 
         **This is not a secure erase.** Python strings are immutable and the
         interpreter may hold copies the process cannot reach, so this removes
         the reference, not every byte. For a stronger guarantee the value
         must never reach this process — see `docs/limitations.md`.
         """
+        cutoff = WIPE_AFTER_SECONDS if older_than is None else older_than
+        if cutoff < 0:
+            raise VaultError(
+                f"older_than cannot be negative (got {cutoff}); "
+                "0 forgets everything and a larger value forgets less"
+            )
+        now = time.time()
         with self._lock:
-            count = len(self.values)
-            self.values.clear()
-            self._reverse.clear()
-            # Counters are deliberately kept. Resetting them would let a
-            # later mint reuse `EMAIL_1` for a different person, so a token
-            # from before the wipe would resolve to the wrong value instead
-            # of to nothing.
-            return count
+            stale = [
+                token
+                for token in self.values
+                # A token with no recorded time predates this field — from an
+                # older serialized vault — and is treated as old, because the
+                # safe assumption about data of unknown age is that it has
+                # outlived its use.
+                if now - self._minted_at.get(token, 0.0) >= cutoff
+            ]
+            for token in stale:
+                original = self.values.pop(token)
+                self._reverse.pop(original, None)
+                self._minted_at.pop(token, None)
+            return len(stale)
 
     @property
     def wiped(self) -> bool:
