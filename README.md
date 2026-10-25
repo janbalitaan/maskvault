@@ -212,6 +212,42 @@ SerializedVaultStore(backend, PlaintextCipher())   # faster, and visible
 production log is the kind of thing someone notices; a silent default never
 would be.
 
+### Who does the encrypting
+
+maskvault performs it and implements none of it. The only cipher here
+delegates to `cryptography`'s Fernet — an audited implementation — and this
+package contains no cryptographic primitive of its own.
+
+The key is yours throughout. Where it lives, how it rotates, and whether it
+ever reaches the process at all are your decisions, and the key never appears
+in anything this library writes: not a repr, not `describe()`, not the vault,
+not the stored bytes.
+
+If you would rather own the whole operation, implement `VaultCipher`. A KMS,
+an HSM or a Vault transit backend all fit, and none of them require importing
+anything from here:
+
+```python
+class KmsCipher:
+    def __init__(self, client, key_id):
+        self._client, self._key_id = client, key_id
+
+    def encrypt(self, plaintext):
+        return self._client.encrypt(
+            KeyId=self._key_id, Plaintext=plaintext
+        )["CiphertextBlob"]
+
+    def decrypt(self, ciphertext):
+        return self._client.decrypt(CiphertextBlob=ciphertext)["Plaintext"]
+
+    @property
+    def describes(self):
+        return f"aws kms, key {self._key_id}"
+```
+
+That key never reaches your process, and `store.describe()` reports
+`aws kms, key alias/prod` so the choice is visible in a startup log.
+
 ### The lifetime is yours, with a default if you want one
 
 Entries expire after fifteen minutes unless you say otherwise, because a

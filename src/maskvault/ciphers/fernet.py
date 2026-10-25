@@ -97,6 +97,17 @@ class FernetCipher:
             )
         return cls(key)
 
+    def __repr__(self) -> str:
+        """Describe this cipher without its key.
+
+        Explicit rather than relying on the default, which happens to be safe
+        only because this is a plain class. Adding `@dataclass` or a
+        `__dict__`-printing repr later would start putting the key into every
+        traceback, log line and pytest failure — and the default being safe
+        today is luck, not a guarantee.
+        """
+        return f"FernetCipher({self.describes})"
+
     def encrypt(self, plaintext: bytes) -> bytes:
         """Return the ciphertext for `plaintext`."""
         return self._fernet.encrypt(plaintext)

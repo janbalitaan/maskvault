@@ -16,6 +16,10 @@ class PlaintextCipher:
     anyone who did not read the signature.
     """
 
+    def __repr__(self) -> str:
+        """Describe this cipher, saying plainly that it encrypts nothing."""
+        return f"PlaintextCipher({self.describes})"
+
     def encrypt(self, plaintext: bytes) -> bytes:
         """Return the bytes unchanged."""
         return plaintext
