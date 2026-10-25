@@ -31,11 +31,10 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 import re
+from typing import ClassVar
 
 from maskvault.constants import TRAILING_PUNCTUATION
-
-# Pulls the host out of an email address or a URL.
-_HOST = re.compile(r"(?:@|https?://)([^\s/:@]+)", re.I)
+from maskvault.exceptions import WhitelistError
 
 
 @dataclass
@@ -45,6 +44,11 @@ class Whitelist:
     Checked before any detector acts, so an allowed value is never tokenized
     and never needs restoring.
     """
+
+    # Pulls the host out of an email address or a URL. A class attribute
+    # rather than a module constant: it is this class's working detail, used
+    # by one method, and nothing else should reach for it.
+    _HOST: ClassVar[re.Pattern[str]] = re.compile(r"(?:@|https?://)([^\s/:@]+)", re.I)
 
     labels: set[str] = field(default_factory=set)
     categories: set[str] = field(default_factory=set)
@@ -63,14 +67,14 @@ class Whitelist:
     def __post_init__(self) -> None:
         """Normalize the inputs once, so each check is a set lookup."""
         # Normalized once, so the hot path is a set lookup rather than a scan.
-        self._labels = _lower_set(self.labels) | _lower_set(self.categories)
-        self._values = _lower_set(self.values)
-        self._words = _lower_set(self.words)
-        self._contains = _lower_set(self.contains)
+        self._labels = self._lower_set(self.labels) | self._lower_set(self.categories)
+        self._values = self._lower_set(self.values)
+        self._words = self._lower_set(self.words)
+        self._contains = self._lower_set(self.contains)
         self._prefixes = tuple(prefix.lower() for prefix in self.prefixes if prefix)
         self._suffixes = tuple(suffix.lower() for suffix in self.suffixes if suffix)
         self._domains = {domain.lower().lstrip("@.") for domain in self.domains if domain}
-        self._word_pattern = _word_alternation(self._words)
+        self._word_pattern = self._word_alternation(self._words)
 
     # -- the checks --------------------------------------------------------
 
@@ -138,8 +142,26 @@ class Whitelist:
             prefixes=tuple(data.get("prefixes") or []),
             suffixes=tuple(data.get("suffixes") or []),
             domains=set(data.get("domains") or []),
-            patterns=tuple(re.compile(pattern, re.I) for pattern in data.get("patterns") or []),
+            patterns=cls._compile_patterns(data.get("patterns") or []),
         )
+
+    @staticmethod
+    def _compile_patterns(raw: Iterable[str]) -> tuple[re.Pattern[str], ...]:
+        """Compile the allowlist regexes, naming any that will not.
+
+        Raised rather than skipped: silently dropping a rule from an
+        allowlist changes what gets replaced, and the caller would have no
+        way to notice.
+        """
+        compiled = []
+        for pattern in raw:
+            try:
+                compiled.append(re.compile(pattern, re.I))
+            except re.error as error:
+                raise WhitelistError(
+                    f"allowlist pattern {pattern!r} does not compile: {error}"
+                ) from error
+        return tuple(compiled)
 
     def as_dict(self) -> dict:
         """Round-trips with from_dict, for writing a policy back out."""
@@ -174,6 +196,19 @@ class Whitelist:
             predicate=self.predicate or other.predicate,
         )
 
+    @staticmethod
+    def _lower_set(values: Iterable[str]) -> set[str]:
+        """Normalize a set of entries for case-insensitive lookup."""
+        return {value.strip().lower() for value in values if value and value.strip()}
+
+    @staticmethod
+    def _word_alternation(words: set[str]) -> re.Pattern[str] | None:
+        """One pattern for all allowed words, so the check is a single match."""
+        if not words:
+            return None
+        ordered = sorted(words, key=len, reverse=True)
+        return re.compile("|".join(re.escape(word) for word in ordered), re.I)
+
     def describe(self) -> str:
         """Summarize this policy in one line, safe to log."""
         counts = (
@@ -199,22 +234,10 @@ class Whitelist:
         """
         if not self._domains:
             return False
-        found = _HOST.search(candidate)
+        found = self._HOST.search(candidate)
         if not found:
             return False
         host = found.group(1).lower().rstrip(".")
         return any(host == domain or host.endswith(f".{domain}") for domain in self._domains)
 
     # -- config ------------------------------------------------------------
-
-
-def _lower_set(values: Iterable[str]) -> set[str]:
-    return {value.strip().lower() for value in values if value and value.strip()}
-
-
-def _word_alternation(words: set[str]) -> re.Pattern[str] | None:
-    """One pattern for all allowed words, so the check is a single match."""
-    if not words:
-        return None
-    ordered = sorted(words, key=len, reverse=True)
-    return re.compile("|".join(re.escape(word) for word in ordered), re.I)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from maskvault.models.token_format import (
+from maskvault.formats import (
     ANGLES,
     AT_SIGNS,
     BRACKETS,

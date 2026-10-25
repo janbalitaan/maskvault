@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import re
 
+from maskvault.exceptions import DetectorError
 from maskvault.models.action import Action
 
 
@@ -34,6 +35,20 @@ class Detector:
     # survives — "passport: [[PASSPORT_1]]" still reads, and whatever
     # consumes the text can tell what kind of value was removed.
     group: int = 0
+
+    def __post_init__(self) -> None:
+        """Reject a detector whose group does not exist.
+
+        `value_of` falls back to the whole match when the group is missing,
+        which looks like the detector working — the token would silently
+        cover the keyword as well as the value. Checked here so the mistake
+        surfaces at import rather than in someone's output.
+        """
+        if self.group and self.group > (self.pattern.groups or 0):
+            raise DetectorError(
+                f"detector {self.label!r} asks for capture group {self.group}, "
+                f"but its pattern has {self.pattern.groups} group(s)"
+            )
 
     def matches(self, candidate: str) -> bool:
         """Whether a candidate passes this detector's validator, if it has one."""

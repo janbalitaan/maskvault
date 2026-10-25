@@ -5,10 +5,7 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level
-from maskvault.models.token_format import (
-    AT_SIGNS,
-    DEFAULT_FORMATS,
-)
+from maskvault.formats import AT_SIGNS, DEFAULT_FORMATS
 
 
 @pytest.fixture

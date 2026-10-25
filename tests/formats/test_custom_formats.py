@@ -5,11 +5,8 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level
-from maskvault.models.token_format import (
-    TokenFormat,
-    format_from_dict,
-    random_format,
-)
+from maskvault.formats import format_from_dict, random_format
+from maskvault.models.token_format import TokenFormat
 
 
 @pytest.fixture

@@ -40,7 +40,7 @@ build-backend = "uv_build"
 module-root = "src"
 
 [dependency-groups]
-dev = ["pytest>=8.3", "pytest-cov>=6.0", "ruff>=0.8", "ty>=0.0.1a1"]
+dev = ["pytest>=8.3", "pytest-cov>=6.0", "complexipy>=8.1", "ruff>=0.8", "ty>=0.0.1a1"]
 
 [tool.ruff]
 line-length = 96

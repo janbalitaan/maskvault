@@ -52,10 +52,9 @@ from maskvault.detectors import (
     is_phone_shaped,
 )
 from maskvault.entropy import classify, find_secrets, shannon_entropy
+from maskvault.formats import DEFAULT_FORMATS, choose_format, random_format
 from maskvault.levels import detectors_for
 from maskvault.models import (
-    DEFAULT_FORMATS,
-    TOKEN_PATTERN,
     Action,
     Detector,
     EntropyVerdict,
@@ -64,8 +63,8 @@ from maskvault.models import (
     TokenFormat,
     Vault,
     Whitelist,
-    choose_format,
 )
+from maskvault.patterns import TOKEN as TOKEN_PATTERN
 from maskvault.personal import STRUCTURED_PERSONAL, special_category_detectors
 from maskvault.structured import anonymize_data, restore_data
 from maskvault.vocabularies import (
@@ -105,6 +104,7 @@ __all__ = [
     "entropy_detector",
     "find_secrets",
     "is_phone_shaped",
+    "random_format",
     "restore_data",
     "shannon_entropy",
     "special_category_detectors",

@@ -25,6 +25,35 @@ from maskvault.entropy import (
 )
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
+from maskvault.patterns import (
+    API_KEY,
+    AWS_ACCESS_KEY,
+    AWS_SECRET_KEY,
+    BASIC_AUTH_URL,
+    BEARER_HEADER,
+    CARD_NUMBER,
+    CONNECTION_STRING,
+    DATE_OF_BIRTH,
+    EMAIL,
+    ENV_ASSIGNMENT,
+    IBAN,
+    IP_ADDRESS,
+    JWT,
+    MAC_ADDRESS,
+    NATIONAL_ID,
+    NPM_TOKEN,
+    PASSPORT,
+    PASSWORD_ASSIGNMENT,
+    PHONE,
+    PRIVATE_KEY,
+    PYPI_TOKEN,
+    SENDGRID_KEY,
+    SLACK_TOKEN,
+    SSH_PUBLIC_KEY,
+    STRIPE_KEY,
+    TWILIO_KEY,
+    URL,
+)
 
 # ISO-8601-ish dates are all over a CV and are not phone numbers.
 _ISO_DATE = re.compile(r"^\d{4}-\d{1,2}(-\d{1,2})?$")
@@ -45,25 +74,19 @@ DEFAULT_DETECTORS: tuple[Detector, ...] = (
     # ---- destroy: never sent, never restored ----
     Detector(
         label="api_key",
-        pattern=re.compile(
-            r"\b(?:sk-[A-Za-z0-9_\-]{16,}|AIza[A-Za-z0-9_\-]{30,}|gsk_[A-Za-z0-9_\-]{20,}"
-            r"|xai-[A-Za-z0-9_\-]{20,}|r8_[A-Za-z0-9_\-]{20,}|hf_[A-Za-z0-9]{20,}"
-            r"|ghp_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_\-]{16,})\b"
-        ),
+        pattern=API_KEY,
         action=Action.DESTROY,
         notice="[an API key was removed before sending]",
     ),
     Detector(
         label="private_key",
-        pattern=re.compile(
-            r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S
-        ),
+        pattern=PRIVATE_KEY,
         action=Action.DESTROY,
         notice="[a private key was removed before sending]",
     ),
     Detector(
         label="password_assignment",
-        pattern=re.compile(r"\b(?:password|passwd|pwd|secret|token)\s*[:=]\s*\S{4,}", re.I),
+        pattern=PASSWORD_ASSIGNMENT,
         action=Action.DESTROY,
         notice="[a credential was removed before sending]",
     ),
@@ -71,14 +94,14 @@ DEFAULT_DETECTORS: tuple[Detector, ...] = (
         label="card_number",
         # Four groups of four, optionally separated. Deliberately loose: a
         # false positive costs a replaced number, a false negative sends one.
-        pattern=re.compile(r"\b(?:\d{4}[ -]?){3}\d{3,4}\b"),
+        pattern=CARD_NUMBER,
         action=Action.DESTROY,
         notice="[a card number was removed before sending]",
     ),
     # ---- reversible: pseudonymized, then restored ----
     Detector(
         label="email",
-        pattern=re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"),
+        pattern=EMAIL,
         action=Action.REVERSIBLE,
     ),
     Detector(
@@ -87,7 +110,7 @@ DEFAULT_DETECTORS: tuple[Detector, ...] = (
         # grammar of digit groups here invites backtracking, which yields a
         # match covering only the middle of a number — and half a phone
         # number left in the text is worse than no match at all.
-        pattern=re.compile(r"(?<![\w.])\+?\d[\d\s().\-]{4,20}\d(?!\w)"),
+        pattern=PHONE,
         action=Action.REVERSIBLE,
         validate=is_phone_shaped,
     ),
@@ -96,7 +119,7 @@ DEFAULT_DETECTORS: tuple[Detector, ...] = (
         # The trailing character class excludes sentence punctuation. Without
         # that, "see https://example.com/me, then" matched the comma too, and
         # an exact whitelist entry for the URL no longer matched.
-        pattern=re.compile(r"\bhttps?://[^\s<>\"')]*[^\s<>\"').,;:!?]"),
+        pattern=URL,
         action=Action.REVERSIBLE,
     ),
 )
@@ -115,7 +138,7 @@ DEFAULT_DETECTORS: tuple[Detector, ...] = (
 VENDOR_CREDENTIALS: tuple[Detector, ...] = (
     Detector(
         label="aws_access_key",
-        pattern=re.compile(r"\b(?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16}\b"),
+        pattern=AWS_ACCESS_KEY,
         action=Action.DESTROY,
         notice="[an AWS key was removed before sending]",
     ),
@@ -123,21 +146,19 @@ VENDOR_CREDENTIALS: tuple[Detector, ...] = (
         label="aws_secret_key",
         # Only matched next to a naming hint: 40 base64 characters alone is
         # too common a shape to destroy on sight.
-        pattern=re.compile(
-            r"(?i)\baws_?secret(?:_?access)?_?key\b\s*[:=]\s*['\"]?[A-Za-z0-9/+=]{40}['\"]?"
-        ),
+        pattern=AWS_SECRET_KEY,
         action=Action.DESTROY,
         notice="[an AWS secret was removed before sending]",
     ),
     Detector(
         label="slack_token",
-        pattern=re.compile(r"\bxox[abprs]-[0-9A-Za-z-]{10,}\b"),
+        pattern=SLACK_TOKEN,
         action=Action.DESTROY,
         notice="[a Slack token was removed before sending]",
     ),
     Detector(
         label="stripe_key",
-        pattern=re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[0-9A-Za-z]{16,}\b"),
+        pattern=STRIPE_KEY,
         action=Action.DESTROY,
         notice="[a Stripe key was removed before sending]",
     ),
@@ -145,37 +166,37 @@ VENDOR_CREDENTIALS: tuple[Detector, ...] = (
         label="jwt",
         # Three dot-separated base64url segments, the middle one a payload.
         # A JWT often carries an identity and an expiry in readable form.
-        pattern=re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+        pattern=JWT,
         action=Action.DESTROY,
         notice="[a token was removed before sending]",
     ),
     Detector(
         label="twilio_key",
-        pattern=re.compile(r"\bSK[0-9a-fA-F]{32}\b|\bAC[0-9a-fA-F]{32}\b"),
+        pattern=TWILIO_KEY,
         action=Action.DESTROY,
         notice="[a Twilio credential was removed before sending]",
     ),
     Detector(
         label="sendgrid_key",
-        pattern=re.compile(r"\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b"),
+        pattern=SENDGRID_KEY,
         action=Action.DESTROY,
         notice="[a SendGrid key was removed before sending]",
     ),
     Detector(
         label="npm_token",
-        pattern=re.compile(r"\bnpm_[A-Za-z0-9]{36}\b"),
+        pattern=NPM_TOKEN,
         action=Action.DESTROY,
         notice="[an npm token was removed before sending]",
     ),
     Detector(
         label="pypi_token",
-        pattern=re.compile(r"\bpypi-AgEIcHlwaS5vcmc[A-Za-z0-9_-]{16,}\b"),
+        pattern=PYPI_TOKEN,
         action=Action.DESTROY,
         notice="[a PyPI token was removed before sending]",
     ),
     Detector(
         label="ssh_public_key",
-        pattern=re.compile(r"\bssh-(?:rsa|ed25519|dss)\s+[A-Za-z0-9+/=]{32,}"),
+        pattern=SSH_PUBLIC_KEY,
         action=Action.DESTROY,
         notice="[an SSH key was removed before sending]",
     ),
@@ -183,22 +204,19 @@ VENDOR_CREDENTIALS: tuple[Detector, ...] = (
         label="connection_string",
         # The credential-in-a-URL case, which is how a database password most
         # often ends up pasted into a prompt by accident.
-        pattern=re.compile(
-            r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp|ftp|sftp|"
-            r"mssql|clickhouse|cassandra)://[^\s:@/]+:[^\s@/]+@[^\s]+"
-        ),
+        pattern=CONNECTION_STRING,
         action=Action.DESTROY,
         notice="[a connection string with credentials was removed before sending]",
     ),
     Detector(
         label="basic_auth_url",
-        pattern=re.compile(r"\bhttps?://[^\s:@/]+:[^\s@/]+@[^\s]+"),
+        pattern=BASIC_AUTH_URL,
         action=Action.DESTROY,
         notice="[a URL with embedded credentials was removed before sending]",
     ),
     Detector(
         label="bearer_header",
-        pattern=re.compile(r"(?i)\b(?:authorization|x-api-key)\s*:\s*\S+"),
+        pattern=BEARER_HEADER,
         action=Action.DESTROY,
         notice="[an auth header was removed before sending]",
     ),
@@ -206,10 +224,7 @@ VENDOR_CREDENTIALS: tuple[Detector, ...] = (
         label="env_assignment",
         # Any FOO_SECRET=, FOO_TOKEN=, FOO_KEY= style assignment. Catches the
         # vendor nobody has written a pattern for.
-        pattern=re.compile(
-            r"(?i)\b[A-Z][A-Z0-9_]*_(?:SECRET|TOKEN|KEY|PASSWORD|CREDENTIAL|APIKEY)\b"
-            r"\s*[:=]\s*\S{6,}"
-        ),
+        pattern=ENV_ASSIGNMENT,
         action=Action.DESTROY,
         notice="[a credential was removed before sending]",
     ),
@@ -228,40 +243,34 @@ PERSONAL_DATA: tuple[Detector, ...] = (
         label="national_id",
         # US SSN shape. Other countries differ enough that a caller should add
         # their own, which is what `terms` and custom detectors are for.
-        pattern=re.compile(r"\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b"),
+        pattern=NATIONAL_ID,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="iban",
-        pattern=re.compile(r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}\b"),
+        pattern=IBAN,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="ip_address",
         # Personal data under the GDPR, and it identifies a home or employer.
-        pattern=re.compile(
-            r"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}"
-            r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b"
-        ),
+        pattern=IP_ADDRESS,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="mac_address",
-        pattern=re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b"),
+        pattern=MAC_ADDRESS,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="passport",
-        pattern=re.compile(r"(?i)\bpassport\s*(?:no\.?|number|#)?\s*[:=]?\s*([A-Z0-9]{6,9})\b"),
+        pattern=PASSPORT,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="date_of_birth",
-        pattern=re.compile(
-            r"(?i)\b(?:date\s+of\s+birth|dob|born(?:\s+on)?)\s*[:=]?\s*"
-            r"(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})"
-        ),
+        pattern=DATE_OF_BIRTH,
         action=Action.REVERSIBLE,
         group=1,
     ),

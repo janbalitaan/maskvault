@@ -35,6 +35,21 @@ import re
 
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
+from maskvault.patterns import (
+    AGE,
+    BANK_ACCOUNT,
+    COORDINATES,
+    DRIVERS_LICENSE,
+    EMPLOYEE_ID,
+    LICENSE_PLATE,
+    POLICY_NUMBER,
+    POSTAL_CODE,
+    SALARY,
+    SOCIAL_HANDLE,
+    STREET_ADDRESS,
+    TAX_ID,
+    UNIT_NUMBER,
+)
 from maskvault.vocabularies import SPECIAL_CATEGORIES
 
 # ---------------------------------------------------------------------------
@@ -46,94 +61,61 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
         label="street_address",
         # A number followed by a street word. Deliberately conservative: it
         # wants the street type, because "12 years" is not an address.
-        pattern=re.compile(
-            r"\b\d{1,5}[A-Za-z]?\s+(?:[A-Z][\w'-]*\s+){0,3}"
-            r"(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Boulevard|Blvd\.?|Lane|Ln\.?|"
-            r"Drive|Dr\.?|Court|Ct\.?|Place|Pl\.?|Terrace|Way|Close|Crescent|"
-            r"Highway|Hwy\.?|Parkway|Circle|Square|Sq\.?)\b",
-            re.I,
-        ),
+        pattern=STREET_ADDRESS,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="unit_number",
-        pattern=re.compile(
-            r"(?i)\b(?:apt|apartment|unit|suite|ste|flat|room|rm|blk|block|"
-            r"floor|fl)\.?\s*#?\s*[\w-]{1,8}\b"
-        ),
+        pattern=UNIT_NUMBER,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="postal_code",
         # Several national formats. Matched only after a locality hint, so a
         # bare four-digit number is not mistaken for a postcode.
-        pattern=re.compile(
-            r"(?i)\b(?:zip|zipcode|postal\s*code|postcode)\s*[:=]?\s*"
-            r"([A-Z0-9][A-Z0-9 -]{2,9}[A-Z0-9])\b"
-        ),
+        pattern=POSTAL_CODE,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="coordinates",
         # A home is findable from one of these to within a few metres.
-        pattern=re.compile(
-            r"(?<![\w.])-?(?:[0-8]?\d|90)\.\d{3,}\s*,\s*-?(?:1[0-7]\d|[0-9]?\d|180)\.\d{3,}(?![\w.])"
-        ),
+        pattern=COORDINATES,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="drivers_license",
-        pattern=re.compile(
-            r"(?i)\b(?:driver'?s?\s*(?:licen[cs]e|lic)|dl|licen[cs]e\s*(?:no|number|#))"
-            r"\s*[:=]?\s*([A-Z0-9][A-Z0-9 -]{4,14})\b"
-        ),
+        pattern=DRIVERS_LICENSE,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="license_plate",
-        pattern=re.compile(
-            r"(?i)\b(?:plate|registration|reg\.?)\s*(?:no\.?|number|#)?\s*[:=]?\s*"
-            r"([A-Z0-9]{2,4}[\s-]?[A-Z0-9]{2,4})\b"
-        ),
+        pattern=LICENSE_PLATE,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="tax_id",
-        pattern=re.compile(
-            r"(?i)\b(?:tax\s*id|tin|ein|vat\s*(?:no|number|id)|nino|"
-            r"national\s*insurance|sss|tin\s*no)\s*[:=]?\s*([A-Z0-9][A-Z0-9 -]{5,15})\b"
-        ),
+        pattern=TAX_ID,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="bank_account",
-        pattern=re.compile(
-            r"(?i)\b(?:account|acct|a/c|routing|sort\s*code|swift|bic)\s*"
-            r"(?:no\.?|number|#)?\s*[:=]?\s*([A-Z0-9][A-Z0-9 -]{5,20})\b"
-        ),
+        pattern=BANK_ACCOUNT,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="policy_number",
-        pattern=re.compile(
-            r"(?i)\b(?:policy|member|patient|medical\s*record|mrn|insurance|"
-            r"medicare|medicaid|philhealth|nhs)\s*(?:no\.?|number|id|#)?\s*"
-            r"[:=]?\s*([A-Z0-9][A-Z0-9 -]{4,18})\b"
-        ),
+        pattern=POLICY_NUMBER,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="employee_id",
-        pattern=re.compile(
-            r"(?i)\b(?:employee|staff|student|badge|payroll)\s*(?:no\.?|number|id|#)?"
-            r"\s*[:=]?\s*([A-Z0-9][A-Z0-9-]{3,14})\b"
-        ),
+        pattern=EMPLOYEE_ID,
         action=Action.REVERSIBLE,
         group=1,
     ),
@@ -141,35 +123,18 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
         label="salary",
         # Compensation is one of the most consequential things to leak, and
         # the figure is what matters, not the currency.
-        pattern=re.compile(
-            r"(?i)(?:(?:salary|compensation|pay|rate|earn(?:s|ing|ed)?|income|"
-            r"package|offer)\D{0,16})"
-            r"(?:[$£€₱¥]|usd|eur|gbp|php|inr|sgd|aud)?\s?"
-            r"\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?:\s?(?:k|per\s+\w+|/\w+|a\s+year|annually|pa))?"
-        ),
+        pattern=SALARY,
         action=Action.REVERSIBLE,
     ),
     Detector(
         label="social_handle",
-        pattern=re.compile(
-            # Platform names only, and none shorter than two characters. A
-            # one-letter name such as "x" matches inside any address or path,
-            # which costs far more than the handles it would catch.
-            r"(?i)\b(?:twitter|instagram|telegram|tiktok|discord|signal|"
-            r"whatsapp|wechat|viber|skype|facebook|mastodon|threads|bluesky)"
-            # An optional noun and copula, so "telegram is x", "telegram
-            # handle: x" and "telegram @x" all reach the value.
-            r"(?:\s+(?:handle|username|user|account|id|profile))?"
-            r"\s*(?:is|:|=|at)?\s*@?([\w.]{3,30})\b"
-        ),
+        pattern=SOCIAL_HANDLE,
         action=Action.REVERSIBLE,
         group=1,
     ),
     Detector(
         label="age",
-        pattern=re.compile(
-            r"(?i)\b(?:i\s*am|aged?|age\s*[:=]?)\s*(\d{1,3})\s*(?:years?\s*old)?\b"
-        ),
+        pattern=AGE,
         action=Action.REVERSIBLE,
         group=1,
     ),

@@ -5,9 +5,7 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level
-from maskvault.models.token_format import (
-    TokenFormat,
-)
+from maskvault.models.token_format import TokenFormat
 
 
 @pytest.fixture

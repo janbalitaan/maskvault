@@ -18,18 +18,14 @@ from __future__ import annotations
 
 import re
 
+from maskvault.formats import DEFAULT_FORMATS, FORMATS_BY_NAME, choose_format
 from maskvault.levels import detectors_for
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
 from maskvault.models.finding import Finding
 from maskvault.models.level import Level
 from maskvault.models.substitution import Substitution
-from maskvault.models.token_format import (
-    DEFAULT_FORMATS,
-    FORMATS_BY_NAME,
-    TokenFormat,
-    choose_format,
-)
+from maskvault.models.token_format import TokenFormat
 from maskvault.models.vault import Vault
 from maskvault.models.whitelist import Whitelist
 

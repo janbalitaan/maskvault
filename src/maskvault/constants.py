@@ -76,3 +76,13 @@ PARANOID_RELAX_BY = 0.5
 # Stripped from both ends before an allowlist comparison, because a detector
 # may hand over a value with sentence punctuation attached.
 TRAILING_PUNCTUATION = " .,;:!?\"'()[]{}<>"
+
+
+# ---------------------------------------------------------------------------
+# Structured data
+# ---------------------------------------------------------------------------
+
+# How deep to walk a nested structure. A structure referencing itself would
+# otherwise recurse forever, and a depth cap is cheaper than checking every
+# node for a cycle.
+MAX_STRUCTURE_DEPTH = 64

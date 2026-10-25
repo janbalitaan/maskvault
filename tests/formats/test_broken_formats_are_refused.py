@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from maskvault.models.token_format import (
-    DEFAULT_FORMATS,
-    TokenFormat,
-    choose_format,
-)
+from maskvault.formats import DEFAULT_FORMATS, choose_format
+from maskvault.models.token_format import TokenFormat
 
 
 class TestBrokenFormatsAreRefused:
