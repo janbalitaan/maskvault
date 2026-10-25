@@ -86,7 +86,6 @@ class Anonymizer:
         # can supply their own, so "pick one that fits the text" does not
         # mean "pick one of ours".
         self._candidates = format_candidates or DEFAULT_FORMATS
-        self._active_format = self._fixed_format or self._candidates[0]
 
     def anonymize(self, text: str) -> tuple[str, Vault]:
         """Return text safe to send, plus the vault needed to restore it."""
@@ -97,6 +96,11 @@ class Anonymizer:
     def anonymize_into(self, text: str, vault: Vault) -> str:
         """Replace values in one string, accumulating into an existing vault.
 
+        Nothing about the operation is stored on this object, which is what
+        makes one anonymizer safe to share across concurrent callers — the
+        shape nearly every web application takes. The format and the counters
+        both live on the vault, and the vault belongs to the caller.
+
         This is what lets a caller anonymize many strings under one vault — a
         structure walked field by field, or a conversation turn by turn. A
         value appearing in two of them keeps one token, so whatever reads the
@@ -105,7 +109,6 @@ class Anonymizer:
         if not self._enabled or not text:
             return text
 
-        self._active_format = vault.token_format
         counters = self._counters_from(vault)
 
         # Caller-supplied terms first: they are the most specific and the most
@@ -336,7 +339,7 @@ class Anonymizer:
         def swap(match: re.Match[str]) -> str:
             whole = match.group(0)
             original = rule.value_of(match)
-            if self._is_own_output(original):
+            if self._is_own_output(original, vault.token_format):
                 return whole
             if not original or self._whitelist.allows_value(original):
                 return whole
@@ -346,8 +349,8 @@ class Anonymizer:
                 token = seen[original]
             else:
                 counters[rule.label] = counters.get(rule.label, 0) + 1
-                token = self._active_format.render(
-                    self._active_format.label_for(rule.label),
+                token = vault.token_format.render(
+                    vault.token_format.label_for(rule.label),
                     counters[rule.label],
                 )
                 seen[original] = token
@@ -357,7 +360,7 @@ class Anonymizer:
 
         return rule.pattern.sub(swap, text)
 
-    def _is_own_output(self, candidate: str) -> bool:
+    def _is_own_output(self, candidate: str, token_format: TokenFormat) -> bool:
         """Whether a candidate is something this anonymizer already inserted.
 
         Detectors run one after another over progressively replaced text, so a
@@ -377,7 +380,7 @@ class Anonymizer:
         # rather than equalling one: the paranoid entropy pattern took
         # `user=@@EMAIL_1@@` as a single run, so an exact comparison let it
         # through and the token inside was destroyed with the rest.
-        if self._active_format.pattern.search(candidate):
+        if token_format.pattern.search(candidate):
             return True
         # A notice is prose in brackets, and the only prose this library puts
         # into the text. Matching the shape rather than the exact strings
@@ -389,7 +392,7 @@ class Anonymizer:
 
         def swap(match: re.Match[str]) -> str:
             original = match.group(0)
-            if self._is_own_output(original):
+            if self._is_own_output(original, vault.token_format):
                 return original
             if self._whitelist.allows_value(original):
                 return original

@@ -17,6 +17,7 @@ import re
 import pytest
 
 from maskvault import Anonymizer, Level, TokenFormats, anonymize_data, restore_data
+from maskvault.formats import AT_SIGNS, MATH_BRACKETS
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
 
@@ -101,21 +102,23 @@ class TestTheGuardItself:
     def test_an_empty_candidate_is_not_own_output(self):
         """A detector with an optional capture group can hand over nothing,
         and the guard is asked before the emptiness check."""
-        assert not Anonymizer()._is_own_output("")
+        assert not Anonymizer()._is_own_output("", AT_SIGNS)
 
     def test_a_token_is_recognized(self):
-        anonymizer = Anonymizer()
-        anonymizer.anonymize("write to me@acme.com")
-        assert anonymizer._is_own_output("@@EMAIL_1@@")
+        assert Anonymizer()._is_own_output("@@EMAIL_1@@", AT_SIGNS)
 
     def test_text_containing_a_token_is_recognized(self):
         """The case a fullmatch missed: the candidate is wider than the token."""
-        anonymizer = Anonymizer()
-        anonymizer.anonymize("write to me@acme.com")
-        assert anonymizer._is_own_output("user=@@EMAIL_1@@")
+        assert Anonymizer()._is_own_output("user=@@EMAIL_1@@", AT_SIGNS)
 
     def test_ordinary_text_is_not(self):
-        assert not Anonymizer()._is_own_output("write to me@acme.com")
+        assert not Anonymizer()._is_own_output("write to me@acme.com", AT_SIGNS)
+
+    def test_the_format_is_passed_in_not_remembered(self):
+        """It belongs to the operation, not the object. A token in another
+        format is not this operation's output."""
+        assert not Anonymizer()._is_own_output("@@EMAIL_1@@", MATH_BRACKETS)
+        assert Anonymizer()._is_own_output("\u27e6EMAIL_1\u27e7", MATH_BRACKETS)
 
     def test_a_reversible_detector_also_leaves_a_token_alone(self):
         """The guard sits in both paths, and a caller's own detector is how a
