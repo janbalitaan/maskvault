@@ -147,3 +147,15 @@ language.
 No scanning of files at rest, no policy server, no audit trail, no
 classification taxonomy. It anonymizes text you hand it, in-process, and
 hands the mapping back to you. Everything else is yours to build.
+
+## An unserialized connection loses operations
+
+`DatabaseVaultStore(..., serialize=False)` with a driver that is not
+thread-safe loses operations under contention — measured on sqlite3 with one
+connection and sixteen threads, about a third of them, as raised errors,
+missed rows and unresolved tokens.
+
+None of them came back as another caller's value, because the scope marker
+stops a token resolving in the wrong vault. But "fails loudly" is the most
+that can be promised there, and the default exists so you do not have to
+rely on it.

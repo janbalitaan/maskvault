@@ -104,9 +104,28 @@ A store's thread safety is the store's where it owns the state, and the
 | `SerializedVaultStore` | as safe as the backend you passed |
 | `DatabaseVaultStore` | as safe as the connection you passed |
 
-Neither of the latter two adds a lock, deliberately: a lock around a driver
-that is already thread-safe serializes every request through one mutex for
-nothing, and a lock cannot rescue a driver that is not.
+`DatabaseVaultStore` serializes every statement by default. Concurrency is
+then bounded by the store rather than by the database, which is the trade
+worth making: the alternative is a wrong answer about somebody's
+confidential data.
+
+`serialize=False` removes the lock, and the cost is measurable. One sqlite3
+connection across sixteen threads, 200 sessions, on Python 3.13:
+
+| | serialized | not |
+| --- | --- | --- |
+| round-tripped | 200 | 125 |
+| driver error raised | 0 | 54 |
+| row not found | 0 | 17 |
+| token left unresolved | 0 | 4 |
+| **another caller's value** | **0** | **0** |
+
+The last row is the one that matters and it holds either way — because the
+vault's scope marker means a token from one conversation is not found in
+another conversation's vault, so the failure is an unresolved token that
+`leaked()` reports rather than a plausible wrong answer. Use
+`serialize=False` only with a driver that is already thread-safe, or a pool
+that hands out one connection per thread.
 
 What the store does do is open a cursor per statement and close it in a
 `finally`. That matches the rule the drivers actually state, and means a

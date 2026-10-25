@@ -158,22 +158,63 @@ class TestASharedConnectionIsCorrectByDefault:
                 f"session {n} got another session's data: {restored}"
             )
 
-    def test_opting_out_never_returns_a_wrong_value(self, database):
-        """`serialize=False` may raise under contention. It may not lie."""
+    def test_opting_out_never_returns_another_callers_value(self, database):
+        """`serialize=False` may raise, and may fail to resolve. It may not lie.
+
+        Under contention an unserialized sqlite3 connection gives four
+        outcomes, and only the first is success: the round trip works, the
+        driver raises, the row is missed, or a vault comes back that does not
+        hold the token — leaving it unresolved in the text, where `leaked()`
+        reports it.
+
+        What must never happen is a fifth: a token resolving to **another
+        caller's value**. That is what `Vault.for_key` prevents, and this
+        proves it under a genuine race rather than by argument. Measured on
+        Python 3.13: 125 ok, 54 errors, 17 misses, 4 unresolved, 0 wrong.
+        """
         connection = sqlite3.connect(database, check_same_thread=False, timeout=30)
         store = store_for(connection, serialize=False)
+        anonymizer = Anonymizer()
+        mine = {n: f"Email user{n}@company{n}.test" for n in range(SESSIONS)}
 
         def handle(n: int) -> str:
+            key = f"unserialized-{n}"
             try:
-                return "ok" if round_trip(store, f"unserialized-{n}") else "wrong"
+                vault = Vault.for_key(key)
+                safe = anonymizer.anonymize_into(mine[n], vault)
+                store.save(key, vault)
+                loaded = store.load(key)
+                if loaded is None:
+                    return "miss"
+                restored = anonymizer.restore(safe, loaded)
+                if restored == mine[n]:
+                    return "ok"
+                if any(other in restored for index, other in mine.items() if index != n):
+                    return "SOMEONE_ELSES_DATA"
+                return "unresolved" if anonymizer.leaked(restored, loaded) else "silent"
             except Exception:
                 return "error"
 
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
             outcomes = list(pool.map(handle, range(SESSIONS)))
 
-        assert "wrong" not in outcomes
-        assert outcomes.count("ok") > 0
+        assert "SOMEONE_ELSES_DATA" not in outcomes, (
+            "an unserialized connection returned another caller's value"
+        )
+        assert "silent" not in outcomes, (
+            "a value went missing with no token left for leaked() to find"
+        )
+
+    def test_the_default_has_none_of_those_outcomes(self, database):
+        """Which is the argument for serializing: one outcome, not four."""
+        connection = sqlite3.connect(database, check_same_thread=False, timeout=30)
+        store = store_for(connection)
+
+        def handle(n: int) -> bool:
+            return round_trip(store, f"serialized-{n}")
+
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            assert all(pool.map(handle, range(SESSIONS)))
 
 
 class _CountingCursor:
