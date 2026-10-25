@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
 from typing import TextIO
 
 from maskvault.anonymizer import Anonymizer
+from maskvault.cli.command import Command
 from maskvault.cli.exit_codes import ExitCode
 from maskvault.cli.reader import InputReader
 from maskvault.exceptions.base import MaskvaultError
@@ -16,7 +16,7 @@ from maskvault.models.finding import Finding
 from maskvault.models.level import Level
 
 
-class ExplainCommand:
+class ExplainCommand(Command):
     """Reports what would be replaced, and exits non-zero if anything would.
 
     The command to reach for before pasting a log into a chat window or
@@ -40,11 +40,9 @@ class ExplainCommand:
         out: TextIO | None = None,
         err: TextIO | None = None,
     ) -> None:
-        self._path = path
+        super().__init__(path, out=out, err=err)
         self._level = level
         self._as_json = as_json
-        self._out = out or sys.stdout
-        self._err = err or sys.stderr
 
     def run(self) -> ExitCode:
         """Report the findings and return the status to exit with."""
@@ -52,8 +50,7 @@ class ExplainCommand:
             text = InputReader.read(self._path)
             findings = Anonymizer(level=self._level).explain(text)
         except MaskvaultError as error:
-            print(f"error: {error}", file=self._err)
-            return ExitCode.USAGE
+            return self._fail(error)
 
         replaced = [finding for finding in findings if finding.replaced]
         if self._as_json:

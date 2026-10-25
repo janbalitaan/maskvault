@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
 from typing import TextIO
 
 from maskvault.anonymizer import Anonymizer
+from maskvault.cli.command import Command
 from maskvault.cli.exit_codes import ExitCode
 from maskvault.cli.reader import InputReader
 from maskvault.exceptions.base import MaskvaultError
@@ -15,7 +15,7 @@ from maskvault.models.level import Level
 from maskvault.models.vault import Vault
 
 
-class AnonymizeCommand:
+class AnonymizeCommand(Command):
     """Prints the anonymized text, and writes the vault beside it.
 
     The vault is what makes this reversible, and it holds the original values
@@ -34,11 +34,9 @@ class AnonymizeCommand:
         out: TextIO | None = None,
         err: TextIO | None = None,
     ) -> None:
-        self._path = path
+        super().__init__(path, out=out, err=err)
         self._level = level
         self._vault_path = vault_path
-        self._out = out or sys.stdout
-        self._err = err or sys.stderr
 
     def run(self) -> ExitCode:
         """Anonymize, print, and return the status to exit with."""
@@ -48,13 +46,10 @@ class AnonymizeCommand:
             if self._vault_path is not None:
                 self._write_vault(vault)
         except MaskvaultError as error:
-            print(f"error: {error}", file=self._err)
-            return ExitCode.USAGE
+            return self._fail(error)
 
-        print(safe, end="" if safe.endswith("\n") else "\n", file=self._out)
-        # The summary goes to stderr so that redirecting stdout to a file
-        # captures the text alone.
-        print(f"[{vault.summary()}]", file=self._err)
+        self._emit(safe)
+        self._note(f"[{vault.summary()}]")
         return ExitCode.OK
 
     def _write_vault(self, vault: Vault) -> None:

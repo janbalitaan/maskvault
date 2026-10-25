@@ -103,25 +103,22 @@ class Levels:
 
         if level is Level.STANDARD:
             return (*standard, EntropyDetector.build())
+
+        # STRICT and PARANOID are the same set plus the special categories.
+        # They differ in one thing only: how hard the entropy net casts.
+        sensitive = standard + SpecialCategories.special_category_detectors(extra=extra_terms)
         if level is Level.STRICT:
-            return (
-                standard
-                + SpecialCategories.special_category_detectors(extra=extra_terms)
-                + (EntropyDetector.build(),)
-            )
+            return (*sensitive, EntropyDetector.build())
+        # A lower bar and a wider alphabet catch more real secrets, including
+        # punctuated passwords, and more false positives. That is the trade
+        # PARANOID exists to make.
         return (
-            standard
-            + SpecialCategories.special_category_detectors(extra=extra_terms)
-            # A lower bar and a wider alphabet catch more real secrets, including
-            # punctuated passwords, and more false positives. That is the trade
-            # PARANOID exists to make.
-            + (
-                EntropyDetector.build(
-                    min_length=PARANOID_MIN_LENGTH,
-                    relax_by=PARANOID_RELAX_BY,
-                    include_symbols=True,
-                ),
-            )
+            *sensitive,
+            EntropyDetector.build(
+                min_length=PARANOID_MIN_LENGTH,
+                relax_by=PARANOID_RELAX_BY,
+                include_symbols=True,
+            ),
         )
 
     @staticmethod

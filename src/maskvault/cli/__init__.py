@@ -47,14 +47,28 @@ LEVELS = [member.value for member in Level]
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Build the argument parser, separately so it can be tested on its own."""
+    """Build the argument parser, separately so it can be tested on its own.
+
+    One function per subcommand below. The help and description text is most
+    of the volume, and keeping it beside the arguments it describes is what
+    makes a `--help` worth reading — but four of them in one function buried
+    the shape of the CLI.
+    """
     parser = argparse.ArgumentParser(
         prog="maskvault",
         description="Replace confidential values before text leaves your machine.",
         epilog=("exit status:  0 nothing sensitive   1 something found   2 could not run"),
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    _explain_command(commands)
+    _anonymize_command(commands)
+    _restore_command(commands)
+    _policy_command(commands)
+    return parser
 
+
+def _explain_command(commands: argparse._SubParsersAction) -> None:
+    """Register `explain`, which reports what is sensitive without printing it."""
     explain = commands.add_parser(
         "explain",
         help="report what is sensitive, revealing none of it",
@@ -69,6 +83,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", dest="as_json", action="store_true", help="machine-readable output"
     )
 
+
+def _anonymize_command(commands: argparse._SubParsersAction) -> None:
+    """Register `anonymize`, which writes the cleaned text to stdout."""
     anonymize = commands.add_parser(
         "anonymize",
         help="print the text with sensitive values replaced",
@@ -90,6 +107,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+
+def _restore_command(commands: argparse._SubParsersAction) -> None:
+    """Register `restore`, which puts the original values back."""
     restore = commands.add_parser(
         "restore",
         help="put the original values back, using a vault",
@@ -110,6 +130,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--vault", type=Path, required=True, metavar="FILE", help="the vault to use"
     )
 
+
+def _policy_command(commands: argparse._SubParsersAction) -> None:
+    """Register `policy`, which prints what each level detects."""
     policy = commands.add_parser(
         "policy",
         help="print what each strictness level detects",
@@ -121,7 +144,6 @@ def build_parser() -> argparse.ArgumentParser:
     policy.add_argument(
         "--level", choices=LEVELS, default=None, help="one level instead of all of them"
     )
-    return parser
 
 
 def _add_common(parser: argparse.ArgumentParser) -> None:

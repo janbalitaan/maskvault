@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
 from typing import TextIO
 
 from maskvault.anonymizer import Anonymizer
+from maskvault.cli.command import Command
 from maskvault.cli.exit_codes import ExitCode
 from maskvault.cli.reader import InputReader
 from maskvault.exceptions import VaultError
@@ -15,7 +15,7 @@ from maskvault.exceptions.base import MaskvaultError
 from maskvault.models.vault import Vault
 
 
-class RestoreCommand:
+class RestoreCommand(Command):
     """Restores text from a vault written by `anonymize`.
 
     Reports tokens it could not restore rather than leaving them silently in
@@ -35,10 +35,8 @@ class RestoreCommand:
         out: TextIO | None = None,
         err: TextIO | None = None,
     ) -> None:
-        self._path = path
+        super().__init__(path, out=out, err=err)
         self._vault_path = vault_path
-        self._out = out or sys.stdout
-        self._err = err or sys.stderr
 
     def run(self) -> ExitCode:
         """Restore, print, and return the status to exit with."""
@@ -49,10 +47,9 @@ class RestoreCommand:
             restored = anonymizer.restore(text, vault)
             leftover = anonymizer.leaked(restored, vault)
         except MaskvaultError as error:
-            print(f"error: {error}", file=self._err)
-            return ExitCode.USAGE
+            return self._fail(error)
 
-        print(restored, end="" if restored.endswith("\n") else "\n", file=self._out)
+        self._emit(restored)
         if leftover:
             print(
                 f"[{len(leftover)} token(s) could not be restored: "

@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import sys
 from typing import TextIO
 
 from maskvault.anonymizer import Anonymizer
+from maskvault.cli.command import Command
 from maskvault.cli.exit_codes import ExitCode
 from maskvault.levels import Levels
 from maskvault.models.action import Action
 from maskvault.models.level import Level
 
 
-class PolicyCommand:
+class PolicyCommand(Command):
     """Lists the detectors a level includes, and what each one does.
 
     The level is the main dial a caller turns, and "what does STRICT actually
@@ -27,8 +27,8 @@ class PolicyCommand:
         *,
         out: TextIO | None = None,
     ) -> None:
+        super().__init__(out=out)
         self._level = level
-        self._out = out or sys.stdout
 
     def run(self) -> ExitCode:
         """Print the policy and return the status to exit with."""
