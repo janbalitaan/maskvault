@@ -11,6 +11,7 @@ from maskvault.ciphers.base import VaultCipher
 from maskvault.constants import VAULT_TTL_SECONDS
 from maskvault.exceptions import VaultError
 from maskvault.models.vault import Vault
+from maskvault.stores.expiry import Expiry
 
 # A table or column name cannot be a bound parameter, so it is interpolated —
 # and therefore has to be validated rather than trusted. Letters, digits and
@@ -35,11 +36,18 @@ class DatabaseVaultStore:
         store.save(conversation_id, vault)        # on node 1
         vault = store.load(conversation_id)       # on node 2
 
-    A database differs from a cache in one way that matters: there is no
-    native expiry. So the lifetime is a column, filtered on every read and
-    reclaimed by `purge()` — which has to be called by something, a cron or a
-    startup hook. An unswept table of vaults is a growing pile of plaintext,
-    which is the one failure this store can have that a cache cannot.
+    A database differs from a cache in two ways that matter.
+
+    There is no native expiry, so the lifetime is a column — filtered on
+    every read and reclaimed by `purge()`, which has to be called by
+    something: a cron, a startup hook, a periodic task. An unswept table of
+    vaults is a growing pile of plaintext, and that is the one failure this
+    store can have which a cache cannot.
+
+    And retention here is usually already somebody's job. A nightly job, a
+    partition drop, a policy the DBA owns — so `ttl_seconds=0` turns this
+    store's expiry off entirely and leaves it to them. That is what zero
+    means throughout: no expiry, not immediate expiry.
     """
 
     def __init__(
@@ -75,7 +83,7 @@ class DatabaseVaultStore:
         self._cipher = cipher
         self._table = table
         self._marker = _PLACEHOLDERS[paramstyle]
-        self._ttl = ttl_seconds
+        self._expiry = Expiry(ttl_seconds)
 
     def create_table(self) -> None:
         """Create the table if it is absent.
@@ -96,7 +104,7 @@ class DatabaseVaultStore:
     def save(self, key: str, vault: Vault) -> None:
         """Store a vault under `key`, replacing any vault already there."""
         payload = self._cipher.encrypt(json.dumps(vault.as_dict()).encode("utf-8"))
-        expires_at = time.time() + self._ttl
+        expires_at = self._expiry.deadline()
         # Delete-then-insert rather than an upsert, because the upsert syntax
         # differs between dialects and this has to work on all of them.
         self._execute(f"DELETE FROM {self._table} WHERE vault_key = {self._marker}", (key,))
@@ -117,7 +125,7 @@ class DatabaseVaultStore:
         if row is None:
             return None
         payload, expires_at = row[0], float(row[1])
-        if expires_at < time.time():
+        if self._expiry.expired(expires_at):
             self.delete(key)
             return None
         serialized = self._cipher.decrypt(bytes(payload))
@@ -140,6 +148,11 @@ class DatabaseVaultStore:
         task. A database has no expiry of its own, so without this the table
         grows and every expired row is plaintext nobody is using.
         """
+        if self._expiry.never:
+            # Nothing was given a deadline, so there is nothing to reclaim.
+            # Returning zero rather than deleting on a comparison that would
+            # match every row.
+            return 0
         cursor = self._execute(
             f"DELETE FROM {self._table} WHERE expires_at < {self._marker}",
             (time.time(),),
@@ -155,9 +168,10 @@ class DatabaseVaultStore:
 
     def describe(self) -> str:
         """Summarize how this store protects what it holds, safe to log."""
+        sweeping = "" if self._expiry.never else " and need purge()"
         return (
             f"vault store: {self._table} table, {self._cipher.describes}, "
-            f"rows expire after {self._ttl:.0f}s and need purge()"
+            f"{self._expiry.describe()}{sweeping}"
         )
 
     def _execute(self, statement: str, parameters: tuple = ()) -> Any:

@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import re
 
-from maskvault.constants import TOKEN_REGEX
-
 # -------------------------------------------------------------------------
 # Credentials, and the generic contact patterns
 # -------------------------------------------------------------------------
@@ -187,7 +185,6 @@ AGE = re.compile(r"(?i)\b(?:i\s*am|aged?|age\s*[:=]?)\s*(\d{1,3})\s*(?:years?\s*
 # Matches tokens written in the default format, for counting them by kind.
 # A Vault carries its own format, so this is the fallback for code holding
 # none — a format's own pattern is derived from its delimiters.
-TOKEN = re.compile(TOKEN_REGEX)
 
 
 # ---------------------------------------------------------------------------

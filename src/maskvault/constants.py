@@ -22,16 +22,6 @@ from __future__ import annotations
 # models.token_format, because no delimiter is safe in every markup language,
 # so these two are the fallback for code holding no format of its own.
 # Not a credential, despite the name — bandit flags anything called TOKEN.
-TOKEN_TEMPLATE = "[[{label}_{index}]]"  # noqa: S105
-TOKEN_REGEX = r"\[\[([A-Z_]+)_(\d+)\]\]"  # noqa: S105
-
-
-# ---------------------------------------------------------------------------
-# Phone numbers
-# ---------------------------------------------------------------------------
-
-# E.164 sets the upper bound. The lower bound excludes short numbers that are
-# far more often quantities than phone numbers.
 PHONE_MIN_DIGITS = 7
 PHONE_MAX_DIGITS = 15
 

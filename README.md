@@ -212,11 +212,28 @@ SerializedVaultStore(backend, PlaintextCipher())   # faster, and visible
 production log is the kind of thing someone notices; a silent default never
 would be.
 
-### Keep the lifetime short, and the key unshared
+### The lifetime is yours, with a default if you want one
 
-Entries expire — fifteen minutes by default — because a vault's lifetime is
-the window in which its values are exposed. A database has no expiry of its
-own, so `DatabaseVaultStore.purge()` has to be called by something.
+Entries expire after fifteen minutes unless you say otherwise, because a
+vault's lifetime is the window in which its values are exposed.
+
+**`ttl_seconds=0` means no expiry**, which hands retention to you. That is
+the point of using a database rather than a cache: retention there is already
+somebody's job — a nightly job, a partition drop, a policy the DBA owns — and
+a library second-guessing it is a library fighting the deployment.
+
+```python
+DatabaseVaultStore(connection, cipher, ttl_seconds=0)     # yours to manage
+DatabaseVaultStore(connection, cipher, ttl_seconds=3600)  # an hour
+```
+
+A negative value raises rather than being read as zero. A TTL is usually
+computed, and one that came out negative is a bug worth hearing about — not a
+silent switch to keeping plaintext forever.
+
+A database has no expiry of its own, so `purge()` has to be called by
+something when a TTL is set. With `ttl_seconds=0` there is nothing for it to
+do, and `describe()` stops asking for it.
 
 And key by something two callers cannot share. A conversation id or a request
 id is right; a user id usually is not, because one user has more than one

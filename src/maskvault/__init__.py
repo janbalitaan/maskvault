@@ -40,7 +40,7 @@ not much of a privacy filter.
 """
 
 from maskvault.anonymizer import Anonymizer
-from maskvault.constants import PHONE_MAX_DIGITS, PHONE_MIN_DIGITS, TOKEN_TEMPLATE
+from maskvault.constants import PHONE_MAX_DIGITS, PHONE_MIN_DIGITS
 from maskvault.detectors import (
     DEFAULT_DETECTORS,
     PERSONAL_DATA,
@@ -62,7 +62,6 @@ from maskvault.models import (
     Vault,
     Whitelist,
 )
-from maskvault.patterns import TOKEN as TOKEN_PATTERN
 from maskvault.personal import STRUCTURED_PERSONAL, SpecialCategories
 from maskvault.structured import anonymize_data, restore_data
 from maskvault.vocabularies import (
@@ -81,8 +80,6 @@ __all__ = [
     "SPECIAL_CATEGORIES",
     "STRUCTURED_PERSONAL",
     "TECHNICAL_HOMONYMS",
-    "TOKEN_PATTERN",
-    "TOKEN_TEMPLATE",
     "VENDOR_CREDENTIALS",
     "Action",
     "Anonymizer",

@@ -7,6 +7,8 @@ who swaps one for the other should not have to re-read their own code.
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from maskvault import Anonymizer
@@ -117,8 +119,9 @@ class TestBothStores:
 
 class TestMemoryStoreSpecifics:
     def test_an_expired_entry_is_gone(self):
-        store = MemoryVaultStore(ttl_seconds=0)
+        store = MemoryVaultStore(ttl_seconds=0.01)
         store.save("c1", Vault())
+        time.sleep(0.02)
         assert store.load("c1") is None
 
     def test_a_live_entry_is_not(self):
@@ -129,18 +132,20 @@ class TestMemoryStoreSpecifics:
     def test_expiry_also_reclaims_the_memory(self):
         """Not just hiding the entry: a vault holds plaintext, so leaving it
         in the dict leaves the values in memory."""
-        store = MemoryVaultStore(ttl_seconds=0)
+        store = MemoryVaultStore(ttl_seconds=0.01)
         store.save("c1", Vault())
+        time.sleep(0.02)
         store.load("c1")
         assert len(store) == 0
 
     def test_purge_reclaims_entries_nobody_asked_for(self):
         """Expiry is checked on access, so an entry never loaded again would
         otherwise sit there for the life of the process."""
-        store = MemoryVaultStore(ttl_seconds=0)
+        store = MemoryVaultStore(ttl_seconds=0.01)
         for index in range(5):
             store.save(f"c{index}", Vault())
         assert len(store) == 5
+        time.sleep(0.02)
         assert store.purge() == 5
         assert len(store) == 0
 

@@ -91,7 +91,7 @@ class TestTheBasics:
 
 class TestExpiry:
     def test_an_expired_row_is_not_returned(self, connection):
-        store = DatabaseVaultStore(connection, PlaintextCipher(), ttl_seconds=0)
+        store = DatabaseVaultStore(connection, PlaintextCipher(), ttl_seconds=0.01)
         store.create_table()
         store.save("c1", Vault())
         time.sleep(0.01)
@@ -99,7 +99,7 @@ class TestExpiry:
 
     def test_loading_an_expired_row_also_deletes_it(self, connection):
         """A vault holds plaintext, so hiding the row is not enough."""
-        store = DatabaseVaultStore(connection, PlaintextCipher(), ttl_seconds=0)
+        store = DatabaseVaultStore(connection, PlaintextCipher(), ttl_seconds=0.01)
         store.create_table()
         store.save("c1", Vault())
         time.sleep(0.01)
@@ -111,7 +111,7 @@ class TestExpiry:
     def test_purge_reclaims_rows_nobody_asked_for(self, connection):
         """A database has no expiry of its own, so without this the table
         grows and every expired row is plaintext nobody is using."""
-        store = DatabaseVaultStore(connection, PlaintextCipher(), ttl_seconds=0)
+        store = DatabaseVaultStore(connection, PlaintextCipher(), ttl_seconds=0.01)
         store.create_table()
         for index in range(5):
             store.save(f"c{index}", Vault())

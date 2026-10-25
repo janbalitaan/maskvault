@@ -9,6 +9,7 @@ from maskvault.constants import VAULT_TTL_SECONDS
 from maskvault.exceptions import VaultError
 from maskvault.models.vault import Vault
 from maskvault.stores.backend import KeyValueBackend
+from maskvault.stores.expiry import Expiry
 
 
 class SerializedVaultStore:
@@ -39,14 +40,17 @@ class SerializedVaultStore:
     """
 
     # Prefixed so a vault is recognizable in a shared keyspace and cannot
-    # collide with whatever else the backend holds.
-    PREFIX = "maskvault:vault:"
+    # collide with whatever else the backend holds. Overridable, because a
+    # deployment with its own key convention should not have to fight this
+    # one.
+    DEFAULT_PREFIX = "maskvault:vault:"
 
     def __init__(
         self,
         backend: KeyValueBackend,
         cipher: VaultCipher,
         ttl_seconds: float = VAULT_TTL_SECONDS,
+        prefix: str | None = None,
     ) -> None:
         """Wrap a backend, encrypting with `cipher` and expiring after the TTL.
 
@@ -64,12 +68,15 @@ class SerializedVaultStore:
         """
         self._backend = backend
         self._cipher = cipher
-        self._ttl = ttl_seconds
+        self._expiry = Expiry(ttl_seconds)
+        self._prefix = self.DEFAULT_PREFIX if prefix is None else prefix
 
     def save(self, key: str, vault: Vault) -> None:
         """Serialize a vault and store it under `key`."""
         serialized = json.dumps(vault.as_dict()).encode("utf-8")
-        self._backend.set(self._key(key), self._cipher.encrypt(serialized), self._ttl)
+        self._backend.set(
+            self._key(key), self._cipher.encrypt(serialized), self._expiry.seconds
+        )
 
     def load(self, key: str) -> Vault | None:
         """Return the vault under `key`, or None when there is none.
@@ -106,9 +113,8 @@ class SerializedVaultStore:
         Worth logging at startup: "plaintext" in a production log is the kind
         of thing someone notices, and a silent default never would be.
         """
-        return f"vault store: {self._cipher.describes}, entries expire after {self._ttl:.0f}s"
+        return f"vault store: {self._cipher.describes}, {self._expiry.describe()}"
 
-    @classmethod
-    def _key(cls, key: str) -> str:
+    def _key(self, key: str) -> str:
         """Namespace a caller's key within the backend's keyspace."""
-        return f"{cls.PREFIX}{key}"
+        return f"{self._prefix}{key}"

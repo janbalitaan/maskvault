@@ -7,6 +7,7 @@ import time
 
 from maskvault.constants import VAULT_TTL_SECONDS
 from maskvault.models.vault import Vault
+from maskvault.stores.expiry import Expiry
 
 
 class MemoryVaultStore:
@@ -17,15 +18,28 @@ class MemoryVaultStore:
     is reachable only from the process that saved it — which is the failure
     this store exists to make obvious rather than to hide.
 
-    Entries expire. A vault holds plaintext originals, so its lifetime is the
-    window in which they are exposed, and an unbounded dict of them is a leak
-    that grows. Expiry is checked on access rather than swept on a timer: a
-    background thread in a library is a thing a caller cannot see or stop.
+    Entries expire by default. A vault holds plaintext originals, so its
+    lifetime is the window in which they are exposed, and an unbounded dict of
+    them is a leak that grows. Expiry is checked on access rather than swept
+    on a timer: a background thread in a library is a thing a caller cannot
+    see or stop, so `purge()` is offered instead.
+
+    `ttl_seconds=0` turns expiry off, which is the caller's to choose — see
+    `maskvault.stores.expiry` for why zero means never rather than
+    immediately.
     """
 
+    def describe(self) -> str:
+        """Summarize how this store holds what it has, safe to log."""
+        return f"vault store: in this process, {self._expiry.describe()}"
+
     def __init__(self, ttl_seconds: float = VAULT_TTL_SECONDS) -> None:
-        """Set up a store whose entries live `ttl_seconds` from their save."""
-        self._ttl = ttl_seconds
+        """Set up a store whose entries live `ttl_seconds` from their save.
+
+        Zero means no expiry, handing retention to the caller. See
+        `maskvault.stores.expiry`.
+        """
+        self._expiry = Expiry(ttl_seconds)
         self._entries: dict[str, tuple[float, Vault]] = {}
         self._lock = threading.Lock()
 
@@ -41,7 +55,7 @@ class MemoryVaultStore:
             if entry is None:
                 return None
             saved_at, vault = entry
-            if time.monotonic() - saved_at > self._ttl:
+            if self._expiry.elapsed_past(saved_at):
                 del self._entries[key]
                 return None
             return vault
@@ -71,9 +85,14 @@ class MemoryVaultStore:
         For a long-lived process that saves many vaults and loads few: without
         this, an entry nobody asks for again is never reclaimed.
         """
-        cutoff = time.monotonic() - self._ttl
+        if self._expiry.never:
+            return 0
         with self._lock:
-            stale = [key for key, (at, _) in self._entries.items() if at < cutoff]
+            stale = [
+                key
+                for key, (saved_at, _) in self._entries.items()
+                if self._expiry.elapsed_past(saved_at)
+            ]
             for key in stale:
                 del self._entries[key]
         return len(stale)
