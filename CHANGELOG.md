@@ -69,7 +69,14 @@ First release.
   change behaviour for every user in the process, including a library that
   never asked, and detection turning itself off is the worst failure
   available here.
-- `docs/extending.md` and `examples/07_extending.py`.
+- A vault cipher is a Protocol, so an application can supply its own — a KMS
+  client, an HSM, a Vault transit backend, or an algorithm an organization
+  mandates. The storage backend is a Protocol for the same reason. Both are
+  tested against implementations that inherit nothing from this library,
+  because a Protocol is only open as long as nothing on the path does an
+  `isinstance` check.
+- `docs/extending.md`, `examples/07_extending.py` and
+  `examples/08_your_own_cipher.py`.
 - `Anonymizer.anonymize_into`, which accumulates into an existing vault so
   many strings — a conversation turn by turn — can share one.
 - Configurable token formats, chosen per operation to avoid colliding with

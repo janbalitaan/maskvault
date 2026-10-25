@@ -13,6 +13,7 @@ reachable that way, and none of them require importing anything from here.
 from __future__ import annotations
 
 import ast
+from importlib.util import find_spec
 import inspect
 import json
 import pathlib
@@ -59,6 +60,13 @@ class TestMaskvaultImplementsNoCryptography:
                 assert marker not in text, f"{path.name} contains {marker!r}"
 
 
+# Every test here builds a Fernet cipher to prove the key does not escape
+# into a repr, a describe or a stored row. Without the extra there is no key
+# to leak, so there is nothing to assert.
+@pytest.mark.skipif(
+    find_spec("cryptography") is None,
+    reason="the encryption extra is not installed",
+)
 class TestTheKeyNeverLeaks:
     """Nine surfaces maskvault writes to, none of which may carry the key."""
 

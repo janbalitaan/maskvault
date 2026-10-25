@@ -132,3 +132,47 @@ repr(FernetCipher(key))
 That repr is explicit rather than inherited. The default happened to be safe
 only because `FernetCipher` is a plain class — adding `@dataclass` later
 would have started printing the key into every traceback and test failure.
+
+## Your own cipher
+
+`VaultCipher` is a Protocol, so a cipher is anything with `encrypt`,
+`decrypt` and `describes`. Nothing to inherit, nothing to register:
+
+```python
+class HmacStreamCipher:
+    def encrypt(self, plaintext: bytes) -> bytes: ...
+    def decrypt(self, ciphertext: bytes) -> bytes: ...
+
+    @property
+    def describes(self) -> str:
+        return "hmac-stream"
+
+SerializedVaultStore(backend, cipher=HmacStreamCipher(key))
+```
+
+That is how a KMS client, an HSM, a Vault transit backend or an algorithm
+your organization mandates drops in. `KeyValueBackend` is a Protocol too, so
+the storage half is equally open — see
+[`examples/08_your_own_cipher.py`](../examples/08_your_own_cipher.py), which
+writes both from the standard library.
+
+Three things a custom cipher owes its caller:
+
+**Authenticate, do not only encrypt.** A vault an attacker can modify is a
+vault whose tokens can be pointed at values of their choosing, so the answer
+your reader sees becomes the one the attacker wrote. `encrypt` that returns
+ciphertext with no tag leaves that open. Fernet does this for you; a stream
+cipher does not.
+
+**Raise on failure.** `decrypt` must raise when the key is wrong or the
+ciphertext was altered. The store lets that propagate rather than turning it
+into `None`, because a silent `None` reads as "no vault for this session" and
+the caller carries on holding tokens it cannot resolve.
+
+**Keep the key out of `describes`.** It goes into logs and `describe()`
+output. Name the algorithm, never the key.
+
+The contract is tested against a cipher that inherits nothing from this
+library, in `tests/stores/test_a_third_party_cipher.py` — a Protocol is only
+open as long as nothing on the path does an `isinstance` check, and that is
+worth verifying rather than assuming.

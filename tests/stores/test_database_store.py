@@ -12,6 +12,7 @@ expiry. The lifetime is a column, filtered on read and reclaimed by
 
 from __future__ import annotations
 
+from importlib.util import find_spec
 import sqlite3
 import time
 
@@ -167,6 +168,14 @@ class TestItRefusesAnUnsafeIdentifier:
         assert "format" in str(caught.value)
 
 
+# Only this class needs Fernet. The rest of the file exercises plain storage,
+# which works without the extra — so the skip is scoped here rather than to
+# the module, or a contributor without the extra would lose coverage of the
+# store itself along with the encryption.
+@pytest.mark.skipif(
+    find_spec("cryptography") is None,
+    reason="the encryption extra is not installed",
+)
 class TestEncryptedRows:
     def test_the_row_does_not_contain_the_value(self, connection):
         store = DatabaseVaultStore(connection, FernetCipher(FernetCipher.generate_key()))

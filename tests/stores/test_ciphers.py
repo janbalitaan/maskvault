@@ -21,6 +21,16 @@ from maskvault.ciphers import FernetCipher, PlaintextCipher
 from maskvault.exceptions import VaultError
 from maskvault.stores import SerializedVaultStore
 
+# Fernet needs the optional `encryption` extra. Without it the library still
+# works — every store falls back to PlaintextCipher and FernetCipher raises a
+# message naming the extra — so these tests skip rather than fail. A
+# contributor running `uv sync && pytest` without the extras should see a
+# working repository, not twenty-five red tests for a feature they did not
+# install. CI installs `--all-extras`, so nothing here goes unexercised.
+cryptography = pytest.importorskip(
+    "cryptography", reason="the encryption extra is not installed"
+)
+
 
 @pytest.fixture
 def key():

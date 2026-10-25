@@ -12,6 +12,7 @@ example is.
 
 from __future__ import annotations
 
+from importlib.util import find_spec
 from pathlib import Path
 import re
 import subprocess
@@ -22,12 +23,27 @@ import pytest
 EXAMPLES = sorted((Path(__file__).resolve().parents[2] / "examples").glob("*.py"))
 
 
+def skip_if_extra_is_missing(example: Path) -> None:
+    """Skip an example whose optional extra is not installed.
+
+    An example that needs one says so in its own docstring — `06_a_store.py`
+    opens with `pip install 'maskvault[encryption]'`. Reading that rather
+    than keeping a list here means a new example carrying the same note is
+    handled without anyone remembering to update this file.
+    """
+    source = example.read_text()
+    for extra, module in (("encryption", "cryptography"),):
+        if f"maskvault[{extra}]" in source and find_spec(module) is None:
+            pytest.skip(f"{example.name} needs the {extra} extra")
+
+
 class TestEveryExampleRuns:
     def test_the_directory_is_not_empty(self):
         assert EXAMPLES, "no examples found"
 
     @pytest.mark.parametrize("example", EXAMPLES, ids=lambda item: item.name)
     def test_it_exits_cleanly(self, example):
+        skip_if_extra_is_missing(example)
         finished = subprocess.run(
             [sys.executable, str(example)],
             capture_output=True,
@@ -38,6 +54,7 @@ class TestEveryExampleRuns:
 
     @pytest.mark.parametrize("example", EXAMPLES, ids=lambda item: item.name)
     def test_it_prints_something(self, example):
+        skip_if_extra_is_missing(example)
         """An example that runs silently teaches nothing."""
         finished = subprocess.run(
             [sys.executable, str(example)], capture_output=True, text=True, check=False
