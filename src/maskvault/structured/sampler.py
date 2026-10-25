@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from maskvault.constants import MAX_STRUCTURE_DEPTH
@@ -39,21 +40,21 @@ class TextSampler:
             return
         if isinstance(node, str):
             self._add(node)
-        elif isinstance(node, dict):
+        elif isinstance(node, Mapping):
             self._collect_mapping(node, depth)
-        elif isinstance(node, (list, tuple, set)):
+        elif isinstance(node, Sequence | set | frozenset) and not isinstance(node, str | bytes):
             self._collect_sequence(node, depth)
 
     def _add(self, value: str) -> None:
         self._pieces.append(value)
         self._size += len(value)
 
-    def _collect_mapping(self, node: dict, depth: int) -> None:
+    def _collect_mapping(self, node: Mapping, depth: int) -> None:
         for key, value in node.items():
             if isinstance(key, str):
                 self._add(key)
             self.collect(value, depth + 1)
 
-    def _collect_sequence(self, node: list | tuple | set, depth: int) -> None:
+    def _collect_sequence(self, node: Sequence | set | frozenset, depth: int) -> None:
         for item in node:
             self.collect(item, depth + 1)

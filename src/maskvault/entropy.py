@@ -25,7 +25,6 @@ identifiers left alone.
 
 from __future__ import annotations
 
-import math
 import re
 
 from maskvault.constants import (
@@ -38,6 +37,7 @@ from maskvault.constants import (
     TOKEN_ALPHABET,
 )
 from maskvault.models.entropy_verdict import EntropyVerdict
+from maskvault.utils.text import TextMetrics
 
 _HEX = re.compile(r"^[0-9a-fA-F]+$")
 _BASE64ISH = re.compile(r"^[A-Za-z0-9+/_\-]+={0,2}$")
@@ -75,33 +75,6 @@ _KNOWN_SAFE = (
 )
 
 
-def shannon_entropy(text: str) -> float:
-    """Bits of entropy per character.
-
-    The standard measure: sum over distinct characters of -p*log2(p), where p
-    is that character's frequency in the string.
-    """
-    if not text:
-        return 0.0
-    length = len(text)
-    counts: dict[str, int] = {}
-    for character in text:
-        counts[character] = counts.get(character, 0) + 1
-    return -sum((count / length) * math.log2(count / length) for count in counts.values())
-
-
-def character_classes(text: str) -> int:
-    """How many of lower, upper, digit and symbol appear."""
-    return sum(
-        (
-            any(character.islower() for character in text),
-            any(character.isupper() for character in text),
-            any(character.isdigit() for character in text),
-            any(not character.isalnum() for character in text),
-        )
-    )
-
-
 def classify(
     candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
 ) -> EntropyVerdict:
@@ -109,14 +82,14 @@ def classify(
 
     `relax_by` lowers each threshold, trading false positives for coverage.
     """
-    classes = character_classes(candidate)
-    entropy = shannon_entropy(candidate)
+    classes = TextMetrics.character_classes(candidate)
+    entropy = TextMetrics.shannon_entropy(candidate)
     min_length = max(min_length, 8)
 
     # Whitespace means this is prose, not a token. Checked first because it
     # is the strongest signal available: entropy cannot tell a varied English
     # phrase from a generated string, and this can.
-    if candidate != candidate.strip() or any(character.isspace() for character in candidate):
+    if TextMetrics.contains_whitespace(candidate):
         return EntropyVerdict(
             candidate, entropy, classes, "prose", False, "contains whitespace, so not a token"
         )
@@ -188,3 +161,9 @@ def looks_like_a_secret(
 ) -> bool:
     """Whether a token should be treated as a secret. Used as a Detector validator."""
     return classify(candidate, relax_by=relax_by, min_length=min_length).is_secret
+
+
+# The measurement functions moved to utils.text when the domain logic and the
+# arithmetic were separated. Kept as names here because they are public API.
+shannon_entropy = TextMetrics.shannon_entropy
+character_classes = TextMetrics.character_classes
