@@ -6,3 +6,13 @@ __pycache__/
 dist/
 *.egg-info/
 .coverage
+*.pyo
+venv/
+.ty_cache/
+.mypy_cache/
+.complexity_cache/
+build/
+.coverage.*
+coverage.xml
+htmlcov/
+.DS_Store
