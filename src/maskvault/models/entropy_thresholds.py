@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from maskvault.constants import (
     BASE64_THRESHOLD,
@@ -29,7 +29,7 @@ class EntropyThresholds:
     else.
 
         EntropyThresholds(hex=2.8)              # catch shorter hex digests
-        EntropyThresholds.relaxed_by(0.5)       # the PARANOID trade
+        EntropyThresholds().relaxed_by(0.5)     # the PARANOID trade
         EntropyThresholds(minimum_classes=3)    # demand more variety
     """
 
@@ -56,18 +56,23 @@ class EntropyThresholds:
                 "every non-empty candidate has one character class"
             )
 
-    @classmethod
-    def relaxed_by(cls, amount: float) -> EntropyThresholds:
-        """Lower every bar by `amount`, catching more and misfiring more.
+    def relaxed_by(self, amount: float) -> EntropyThresholds:
+        """Return these bars, each lowered by `amount`.
 
-        What `PARANOID` does. Kept as a named constructor because "relax
-        everything a bit" is a coherent intention, while picking three
-        numbers independently usually is not.
+        What `PARANOID` does: catches more and misfires more. An instance
+        method rather than a constructor because it has to work on a
+        caller's bars, not only on the defaults — `classify` applies
+        `relax_by` on top of whatever it was given.
+
+        `amount` of 0 returns an equal set, and no bar goes below zero.
         """
-        return cls(
-            hex=max(cls.hex - amount, 0.0),
-            base64=max(cls.base64 - amount, 0.0),
-            mixed=max(cls.mixed - amount, 0.0),
+        if not amount:
+            return self
+        return replace(
+            self,
+            hex=max(self.hex - amount, 0.0),
+            base64=max(self.base64 - amount, 0.0),
+            mixed=max(self.mixed - amount, 0.0),
         )
 
     def for_alphabet(self, alphabet: str) -> float:

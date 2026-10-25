@@ -122,7 +122,7 @@ One bar per alphabet, because the maximum differs: hex tops out at 4 bits per
 character, base64 at 6, an unconstrained alphabet higher still. A single
 number would be too strict for hex or too loose for the rest.
 
-`EntropyThresholds.relaxed_by(0.5)` lowers all of them together, which is
+`EntropyThresholds().relaxed_by(0.5)` lowers all of them together, which is
 what `PARANOID` does. A negative bar or `minimum_classes=0` is refused —
 both would accept everything of the right shape.
 

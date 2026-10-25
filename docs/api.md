@@ -187,7 +187,7 @@ not in the set raises rather than doing nothing — see
 
 ```python
 EntropyThresholds(hex=3.0, base64=4.0, mixed=3.5, minimum_classes=2)
-EntropyThresholds.relaxed_by(0.5)
+EntropyThresholds().relaxed_by(0.5)
 ```
 
 | Member | |

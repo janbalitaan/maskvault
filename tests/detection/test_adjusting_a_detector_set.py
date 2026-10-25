@@ -203,13 +203,13 @@ class TestTunableEntropyBars:
         assert bars.for_alphabet("something-else") == bars.mixed
 
     def test_relaxed_by_lowers_everything(self):
-        relaxed = EntropyThresholds.relaxed_by(0.5)
+        relaxed = EntropyThresholds().relaxed_by(0.5)
         default = EntropyThresholds()
         assert relaxed.hex == default.hex - 0.5
         assert relaxed.base64 == default.base64 - 0.5
 
     def test_relaxing_never_goes_below_zero(self):
-        assert EntropyThresholds.relaxed_by(99).hex == 0.0
+        assert EntropyThresholds().relaxed_by(99).hex == 0.0
 
     def test_a_negative_bar_is_refused(self):
         with pytest.raises(DetectorError, match="cannot be negative"):

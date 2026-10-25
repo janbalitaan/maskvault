@@ -25,6 +25,7 @@ identifiers left alone.
 
 from __future__ import annotations
 
+from functools import partial
 import re
 
 from maskvault.constants import (
@@ -93,41 +94,27 @@ class Entropy:
         codebase's actual traffic — see `EntropyThresholds`. Passing both
         applies `relax_by` on top of the given bars.
         """
-        bars = thresholds or EntropyThresholds()
-        if relax_by:
-            bars = EntropyThresholds(
-                hex=max(bars.hex - relax_by, 0.0),
-                base64=max(bars.base64 - relax_by, 0.0),
-                mixed=max(bars.mixed - relax_by, 0.0),
-                minimum_classes=bars.minimum_classes,
-            )
+        bars = (thresholds or EntropyThresholds()).relaxed_by(relax_by)
         classes = TextMetrics.character_classes(candidate)
         entropy = TextMetrics.shannon_entropy(candidate)
         min_length = max(min_length, 8)
+        # The three measurements are the same in every verdict below; only the
+        # alphabet, the answer and the reason differ. Binding them once keeps
+        # each exit a single readable line.
+        verdict = partial(EntropyVerdict, candidate, entropy, classes)
 
         # Whitespace means this is prose, not a token. Checked first because it
         # is the strongest signal available: entropy cannot tell a varied English
         # phrase from a generated string, and this can.
         if TextMetrics.contains_whitespace(candidate):
-            return EntropyVerdict(
-                candidate,
-                entropy,
-                classes,
-                "prose",
-                False,
-                "contains whitespace, so not a token",
-            )
+            return verdict("prose", False, "contains whitespace, so not a token")
 
         if len(candidate) < min_length:
-            return EntropyVerdict(
-                candidate, entropy, classes, "short", False, "too short to judge"
-            )
+            return verdict("short", False, "too short to judge")
 
         for safe in Entropy._KNOWN_SAFE:
             if safe.match(candidate):
-                return EntropyVerdict(
-                    candidate, entropy, classes, "known", False, "a known non-secret shape"
-                )
+                return verdict("known", False, "a known non-secret shape")
 
         if _HEX.match(candidate):
             alphabet = "hex"
@@ -138,34 +125,15 @@ class Entropy:
         threshold = bars.for_alphabet(alphabet)
 
         if entropy < threshold:
-            return EntropyVerdict(
-                candidate,
-                entropy,
-                classes,
-                alphabet,
-                False,
-                f"entropy {entropy:.2f} below {threshold} for {alphabet}",
+            return verdict(
+                alphabet, False, f"entropy {entropy:.2f} below {threshold} for {alphabet}"
             )
 
         # Hex is single-class by definition, so the diversity rule cannot apply.
         if alphabet != "hex" and classes < bars.minimum_classes:
-            return EntropyVerdict(
-                candidate,
-                entropy,
-                classes,
-                alphabet,
-                False,
-                f"only {classes} character class",
-            )
+            return verdict(alphabet, False, f"only {classes} character class")
 
-        return EntropyVerdict(
-            candidate,
-            entropy,
-            classes,
-            alphabet,
-            True,
-            f"entropy {entropy:.2f} over {threshold} for {alphabet}",
-        )
+        return verdict(alphabet, True, f"entropy {entropy:.2f} over {threshold} for {alphabet}")
 
     @staticmethod
     def find_secrets(text: str) -> list[EntropyVerdict]:

@@ -38,6 +38,38 @@ First release.
   what `anonymize()` will do — same count, same labels.
 - `anonymize_data` and `restore_data`, which walk dicts, lists, sets and JSON
   rather than only strings. One vault covers the whole structure.
+- Every shipped pattern, bound and word list is replaceable at runtime, so a
+  vendor format this version does not know, a region whose phone numbers are
+  shorter, or a term the health vocabulary misses does not mean waiting for a
+  release. `Levels.detectors_for` and `Registry.all_detectors` take `replace`,
+  `without`, `add` and `add_first` — by label, because the order of a shipped
+  list is an implementation detail. A label that is not in the set raises
+  rather than doing nothing, since the usual cause is a typo and silence
+  would leave a caller believing their replacement was in effect.
+- `add_first` for a detector that has to win a span a shipped one would
+  claim. An internal identifier like `EMP-004212` is a punctuated digit run,
+  so the phone detector takes it unless something runs earlier.
+- `EntropyThresholds`, so the entropy bars can be tuned per alphabet instead
+  of only moving together through `relax_by`. One bar each for hex, base64
+  and mixed, because the maximum differs: hex tops out at 4 bits per
+  character and base64 at 6.
+- `PhoneShape.bounded(minimum, maximum)` for a region the default seven-to-
+  fifteen-digit range does not fit, keeping the date-and-time exclusion the
+  validator exists for.
+- `SpecialCategories.vocabularies(extra=)` and `special_category_detectors`,
+  which extend a shipped vocabulary rather than replacing it — a caller
+  adding one term almost never means "and discard the other hundred".
+- `leaked()` now detects a token a model altered — changed case, inserted
+  whitespace, a broken delimiter — not only an intact one. Measured against
+  ten model behaviours it caught one of six failure modes before and six of
+  six after. It over-reports deliberately: a column named `EMAIL_1` is
+  flagged, which is the right direction for a check whose job is to stop a
+  confidential value being sent on.
+- The shipped lookup tables are `MappingProxyType`. Assigning to one would
+  change behaviour for every user in the process, including a library that
+  never asked, and detection turning itself off is the worst failure
+  available here.
+- `docs/extending.md` and `examples/07_extending.py`.
 - `Anonymizer.anonymize_into`, which accumulates into an existing vault so
   many strings — a conversation turn by turn — can share one.
 - Configurable token formats, chosen per operation to avoid colliding with
