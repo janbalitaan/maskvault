@@ -29,7 +29,7 @@ class TestStructuredPersonalDetails:
             ("employee id EMP-4421", "EMP-4421"),
             ("tax id 123-456-789", "123-456-789"),
             ("policy number ABC123456", "ABC123456"),
-            ("driver's licence N01-23-456789", "N01-23-456789"),
+            ("driver's license N01-23-456789", "N01-23-456789"),
             ("date of birth 1991-03-14", "1991-03-14"),
         ],
     )
@@ -211,3 +211,34 @@ class TestInspection:
         text = "me@example.com"
         strict.explain(text)
         assert text == "me@example.com"
+
+
+class TestDetectorPrecedence:
+    """The first detector to match a span claims it, so order is correctness.
+
+    Each case here is a precise format that a looser, keyword-led detector
+    would otherwise claim part of.
+    """
+
+    def test_an_email_is_not_claimed_as_a_social_handle(self, strict):
+        safe, _ = strict.anonymize("write to me@x.com today")
+        assert "[[EMAIL_1]]" in safe
+        assert "SOCIAL_HANDLE" not in safe
+
+    def test_an_email_on_a_platform_domain_is_still_an_email(self, strict):
+        safe, _ = strict.anonymize("write to me@telegram.org today")
+        assert "[[EMAIL_1]]" in safe
+
+    def test_a_url_is_not_broken_up(self, strict):
+        safe, _ = strict.anonymize("see https://discord.gg/abc123 for details")
+        assert "[[URL_1]]" in safe
+
+    def test_a_real_handle_is_still_caught(self, strict):
+        safe, _ = strict.anonymize("my telegram is janbalitaan")
+        assert "janbalitaan" not in safe
+
+    def test_a_vendor_key_keeps_its_label(self, strict):
+        """A specific credential pattern must win over the entropy net, or the
+        log loses what kind of secret appeared."""
+        _, vault = strict.anonymize("key AKIAIOSFODNN7EXAMPLE")
+        assert vault.destroyed == ["aws_access_key"]

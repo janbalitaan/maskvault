@@ -63,6 +63,7 @@ class Whitelist:
     predicate: Callable[[str], bool] | None = None
 
     def __post_init__(self) -> None:
+        """Normalize the inputs once, so each check is a set lookup."""
         # Normalized once, so the hot path is a set lookup rather than a scan.
         self._labels = _lower_set(self.labels) | _lower_set(self.categories)
         self._values = _lower_set(self.values)
@@ -80,30 +81,36 @@ class Whitelist:
         return label.strip().lower() in self._labels
 
     def allows_value(self, value: str) -> bool:
-        """Whether a specific matched value may pass through unchanged."""
+        """Whether a specific matched value may pass through unchanged.
+
+        Trailing punctuation is stripped before comparing, because a detector
+        may hand over "https://example.com/me," with the sentence comma
+        attached and an exact entry would not match it otherwise.
+        """
         candidate = value.strip()
         if not candidate:
             return True
         trimmed = candidate.strip(_TRAILING_PUNCTUATION)
         lowered, trimmed_lower = candidate.lower(), trimmed.lower()
 
-        if lowered in self._values or trimmed_lower in self._values:
-            return True
-        if self._word_pattern is not None and self._word_pattern.fullmatch(trimmed):
-            return True
-        if any(fragment in lowered for fragment in self._contains):
-            return True
-        if trimmed_lower.startswith(self._prefixes) if self._prefixes else False:
-            return True
-        if trimmed_lower.endswith(self._suffixes) if self._suffixes else False:
-            return True
-        if self._allows_host(trimmed):
-            return True
-        if any(
-            pattern.search(candidate) or pattern.search(trimmed) for pattern in self.patterns
-        ):
-            return True
-        return bool(self.predicate and self.predicate(candidate))
+        # Each mechanism as one condition, so adding another does not grow a
+        # chain of early returns.
+        return any(
+            (
+                lowered in self._values,
+                trimmed_lower in self._values,
+                self._word_pattern is not None and bool(self._word_pattern.fullmatch(trimmed)),
+                any(fragment in lowered for fragment in self._contains),
+                bool(self._prefixes) and trimmed_lower.startswith(self._prefixes),
+                bool(self._suffixes) and trimmed_lower.endswith(self._suffixes),
+                self._allows_host(trimmed),
+                any(
+                    pattern.search(candidate) or pattern.search(trimmed)
+                    for pattern in self.patterns
+                ),
+                bool(self.predicate and self.predicate(candidate)),
+            )
+        )
 
     def _allows_host(self, candidate: str) -> bool:
         """Whether the host in an email or URL is an allowed domain.
@@ -123,7 +130,7 @@ class Whitelist:
 
     @classmethod
     def from_dict(cls, data: dict | None) -> Whitelist:
-        """Build one from plain JSON, so a policy can live in a config file.
+        r"""Build one from plain JSON, so a policy can live in a config file.
 
             {
               "labels": ["url", "age"],
@@ -186,7 +193,7 @@ class Whitelist:
         )
 
     def describe(self) -> str:
-        """A one-line summary, safe to log."""
+        """Summarize this policy in one line, safe to log."""
         counts = (
             (len(self._labels), "labels off"),
             (len(self._values), "values"),

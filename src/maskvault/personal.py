@@ -8,7 +8,7 @@ belongs in a third party's logs.
 
 Two kinds here, because they need different handling:
 
-**Structured identifiers** have a shape, so a pattern finds them — a licence
+**Structured identifiers** have a shape, so a pattern finds them — a license
 number, a plate, coordinates, a policy number, a postcode.
 
 **Special categories** do not. "I have type 2 diabetes" has no format; the
@@ -33,7 +33,8 @@ from __future__ import annotations
 
 import re
 
-from maskvault.detectors import Action, Detector
+from maskvault.models.action import Action
+from maskvault.models.detector import Detector
 
 # ---------------------------------------------------------------------------
 # Structured identifiers
@@ -70,6 +71,7 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
             r"([A-Z0-9][A-Z0-9 -]{2,9}[A-Z0-9])\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="coordinates",
@@ -80,20 +82,22 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
         action=Action.REVERSIBLE,
     ),
     Detector(
-        label="drivers_licence",
+        label="drivers_license",
         pattern=re.compile(
             r"(?i)\b(?:driver'?s?\s*(?:licen[cs]e|lic)|dl|licen[cs]e\s*(?:no|number|#))"
             r"\s*[:=]?\s*([A-Z0-9][A-Z0-9 -]{4,14})\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
-        label="licence_plate",
+        label="license_plate",
         pattern=re.compile(
             r"(?i)\b(?:plate|registration|reg\.?)\s*(?:no\.?|number|#)?\s*[:=]?\s*"
             r"([A-Z0-9]{2,4}[\s-]?[A-Z0-9]{2,4})\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="tax_id",
@@ -102,6 +106,7 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
             r"national\s*insurance|sss|tin\s*no)\s*[:=]?\s*([A-Z0-9][A-Z0-9 -]{5,15})\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="bank_account",
@@ -110,6 +115,7 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
             r"(?:no\.?|number|#)?\s*[:=]?\s*([A-Z0-9][A-Z0-9 -]{5,20})\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="policy_number",
@@ -119,6 +125,7 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
             r"[:=]?\s*([A-Z0-9][A-Z0-9 -]{4,18})\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="employee_id",
@@ -127,6 +134,7 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
             r"\s*[:=]?\s*([A-Z0-9][A-Z0-9-]{3,14})\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="salary",
@@ -143,10 +151,18 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
     Detector(
         label="social_handle",
         pattern=re.compile(
-            r"(?i)\b(?:twitter|x|instagram|ig|telegram|tiktok|discord|signal|"
-            r"whatsapp|wechat|viber|skype|facebook|fb)\s*[:=]?\s*@?([\w.]{3,30})\b"
+            # Platform names only, and none shorter than two characters. A
+            # one-letter name such as "x" matches inside any address or path,
+            # which costs far more than the handles it would catch.
+            r"(?i)\b(?:twitter|instagram|telegram|tiktok|discord|signal|"
+            r"whatsapp|wechat|viber|skype|facebook|mastodon|threads|bluesky)"
+            # An optional noun and copula, so "telegram is x", "telegram
+            # handle: x" and "telegram @x" all reach the value.
+            r"(?:\s+(?:handle|username|user|account|id|profile))?"
+            r"\s*(?:is|:|=|at)?\s*@?([\w.]{3,30})\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="age",
@@ -154,6 +170,7 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
             r"(?i)\b(?:i\s*am|aged?|age\s*[:=]?)\s*(\d{1,3})\s*(?:years?\s*old)?\b"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
 )
 

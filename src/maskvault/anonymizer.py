@@ -16,79 +16,22 @@ is never sent anywhere, and is applied to the answer on the way back.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
 import re
 
-from maskvault.detectors import Action, Detector
-from maskvault.levels import Level, detectors_for
-from maskvault.whitelist import Whitelist
+from maskvault.levels import detectors_for
+from maskvault.models.action import Action
+from maskvault.models.detector import Detector
+from maskvault.models.finding import Finding
+from maskvault.models.level import Level
+from maskvault.models.substitution import Substitution
+from maskvault.models.vault import TOKEN_PATTERN, Vault
+from maskvault.models.whitelist import Whitelist
 
-# Tokens a model is unlikely to mangle: no spaces, no markdown meaning, and a
-# shape that survives being quoted or reformatted.
-# A placeholder format, not a credential — bandit flags any name containing
-# "TOKEN", and renaming it to something vaguer would read worse.
+# A shape unlikely to be mangled: no spaces, no markdown meaning, and it
+# survives being quoted or reformatted. The matching TOKEN_PATTERN lives with
+# Vault, which is what needs to read tokens back.
+# Not a credential, despite the name — bandit flags anything called TOKEN.
 TOKEN_TEMPLATE = "[[{label}_{index}]]"  # noqa: S105
-TOKEN_PATTERN = re.compile(r"\[\[([A-Z_]+)_(\d+)\]\]")
-
-
-@dataclass(frozen=True)
-class Finding:
-    """One thing a detector matched, and what would happen to it.
-
-    Returned by `Anonymizer.explain()` so a developer can see the policy's
-    decisions before trusting it. `value` is the real matched text, so a
-    Finding is not safe to log.
-    """
-
-    label: str
-    value: str
-    action: Action
-    start: int
-    end: int
-    allowed: bool
-
-    @property
-    def replaced(self) -> bool:
-        return not self.allowed
-
-
-@dataclass(frozen=True)
-class _Substitution:
-    """One replacement rule, bundled so _substitute takes fewer arguments."""
-
-    label: str
-    pattern: re.Pattern[str]
-    validator: Callable[[str], bool] | None = None
-
-
-@dataclass
-class Vault:
-    """The mapping from token back to original value.
-
-    Never serialized into a prompt, never logged, never returned over HTTP.
-    Held only for the life of one request.
-    """
-
-    values: dict[str, str] = field(default_factory=dict)
-    destroyed: list[str] = field(default_factory=list)
-
-    @property
-    def replaced(self) -> int:
-        """How many distinct values were tokenized."""
-        return len(self.values)
-
-    def summary(self) -> str:
-        """Describe what happened, with no values in it — safe to log."""
-        kinds: dict[str, int] = {}
-        for token in self.values:
-            match = TOKEN_PATTERN.match(token)
-            if match:
-                kinds[match.group(1)] = kinds.get(match.group(1), 0) + 1
-        parts = [f"{count} {kind.lower()}" for kind, count in sorted(kinds.items())]
-        if self.destroyed:
-            parts.append(f"{len(self.destroyed)} destroyed")
-        return ", ".join(parts) or "nothing replaced"
 
 
 class Anonymizer:
@@ -154,14 +97,19 @@ class Anonymizer:
         # Caller-supplied terms first: they are the most specific and the most
         # sensitive, and a literal must win over a generic pattern.
         for label, pattern in self._terms:
-            text = self._substitute(text, _Substitution(label, pattern), counters, vault)
+            text = self._substitute(text, Substitution(label, pattern), counters, vault)
         for detector in self._detectors:
             if detector.action is Action.DESTROY:
                 text = self._destroy(text, detector, vault)
             else:
                 text = self._substitute(
                     text,
-                    _Substitution(detector.label.upper(), detector.pattern, detector.validate),
+                    Substitution(
+                        detector.label.upper(),
+                        detector.pattern,
+                        detector.validate,
+                        detector.group,
+                    ),
                     counters,
                     vault,
                 )
@@ -170,7 +118,7 @@ class Anonymizer:
     def _substitute(
         self,
         text: str,
-        rule: _Substitution,
+        rule: Substitution,
         counters: dict[str, int],
         vault: Vault,
     ) -> str:
@@ -182,18 +130,21 @@ class Anonymizer:
         seen: dict[str, str] = {}
 
         def swap(match: re.Match[str]) -> str:
-            original = match.group(0)
-            if self._whitelist.allows_value(original):
-                return original
+            whole = match.group(0)
+            original = rule.value_of(match)
+            if not original or self._whitelist.allows_value(original):
+                return whole
             if rule.validator is not None and not rule.validator(original):
-                return original
+                return whole
             if original in seen:
-                return seen[original]
-            counters[rule.label] = counters.get(rule.label, 0) + 1
-            token = TOKEN_TEMPLATE.format(label=rule.label, index=counters[rule.label])
-            seen[original] = token
-            vault.values[token] = original
-            return token
+                token = seen[original]
+            else:
+                counters[rule.label] = counters.get(rule.label, 0) + 1
+                token = TOKEN_TEMPLATE.format(label=rule.label, index=counters[rule.label])
+                seen[original] = token
+                vault.values[token] = original
+            # Replace only the value, so a keyword-led match keeps its keyword.
+            return whole.replace(original, token, 1)
 
         return rule.pattern.sub(swap, text)
 
@@ -229,7 +180,7 @@ class Anonymizer:
     # -- inspection --------------------------------------------------------
 
     def explain(self, text: str) -> list[Finding]:
-        """What this anonymizer would do to the text, and why.
+        """Report what this anonymizer would do to the text, and why.
 
         The point of this is to make configuration cheap. Rather than guessing
         a whitelist up front, run real input through it, read the findings, and
@@ -241,48 +192,42 @@ class Anonymizer:
         """
         findings: list[Finding] = []
         for label, pattern in self._terms:
-            findings.extend(self._find(text, label, pattern, Action.REVERSIBLE, None))
-        for detector in self._detectors:
+            # A caller-supplied term behaves exactly like a reversible
+            # detector, so it is reported through the same path.
             findings.extend(
                 self._find(
-                    text,
-                    detector.label.upper(),
-                    detector.pattern,
-                    detector.action,
-                    detector.validate,
+                    text, Detector(label=label, pattern=pattern, action=Action.REVERSIBLE)
                 )
             )
+        for detector in self._detectors:
+            findings.extend(self._find(text, detector))
         # Earliest first, so the report reads in the order of the text.
         findings.sort(key=lambda finding: (finding.start, finding.label))
         return findings
 
-    def _find(
-        self,
-        text: str,
-        label: str,
-        pattern: re.Pattern[str],
-        action: Action,
-        validator: Callable[[str], bool] | None,
-    ) -> list[Finding]:
+    def _find(self, text: str, detector: Detector) -> list[Finding]:
+        """Every match of one detector, as reportable findings."""
+        label = detector.label.upper()
         found = []
-        for match in pattern.finditer(text):
-            value = match.group(0)
-            if validator is not None and not validator(value):
+        for match in detector.pattern.finditer(text):
+            value = detector.value_of(match)
+            if not value or not detector.matches(value):
                 continue
+            start, end = detector.span_of(match)
             found.append(
                 Finding(
                     label=label,
                     value=value,
-                    action=action,
-                    start=match.start(),
-                    end=match.end(),
+                    action=detector.action,
+                    start=start,
+                    end=end,
                     allowed=self._whitelist.allows_value(value),
                 )
             )
         return found
 
     def preview(self, text: str) -> str:
-        """A readable report of what would happen. For a terminal, not a log.
+        """Render what would happen. For a terminal, not a log.
 
         This prints real values, which is the whole point — a developer
         deciding what to allow has to see what was found. It is not safe to
@@ -303,7 +248,7 @@ class Anonymizer:
         return "\n".join(lines)
 
     def suggest_whitelist(self, text: str, *, only_reversible: bool = True) -> dict:
-        """A whitelist draft covering everything found, ready to edit.
+        """Draft a whitelist covering everything found, ready to edit.
 
         Deliberately a *draft*. It allows everything, which is not a policy
         anyone should ship — the intended use is to delete the lines that
@@ -330,7 +275,7 @@ class Anonymizer:
         return self._whitelist
 
     def describe_policy(self) -> str:
-        """What this anonymizer will do, safe to log at startup."""
+        """Summarize what this anonymizer will do, safe to log at startup."""
         state = "on" if self._enabled else "OFF"
         return (
             f"anonymizer {state} at {self._level.value}: {len(self._detectors)} detectors, "

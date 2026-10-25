@@ -20,26 +20,16 @@ outright, or a `Whitelist` to let individual things back through.
 
 from __future__ import annotations
 
-from enum import Enum
-
 from maskvault.detectors import (
     DEFAULT_DETECTORS,
     PERSONAL_DATA,
     VENDOR_CREDENTIALS,
-    Action,
-    Detector,
     entropy_detector,
 )
+from maskvault.models.action import Action
+from maskvault.models.detector import Detector
+from maskvault.models.level import Level
 from maskvault.personal import STRUCTURED_PERSONAL, special_category_detectors
-
-
-class Level(Enum):
-    """How aggressively to replace."""
-
-    MINIMAL = "minimal"
-    STANDARD = "standard"
-    STRICT = "strict"
-    PARANOID = "paranoid"
 
 
 def _credentials_only() -> tuple[Detector, ...]:
@@ -49,30 +39,35 @@ def _credentials_only() -> tuple[Detector, ...]:
 
 
 def detectors_for(level: Level | str = Level.STANDARD) -> tuple[Detector, ...]:
-    """The detector set for a strictness level.
+    """Build the detector set for a strictness level.
 
     Order matters throughout: specific formats before generic ones, and the
-    entropy net last, so a known format is labelled rather than destroyed as
+    entropy net last, so a known format is labeled rather than destroyed as
     an anonymous high-entropy blob.
     """
     level = Level(level) if isinstance(level, str) else level
 
     if level is Level.MINIMAL:
-        return _credentials_only() + (entropy_detector(),)
+        return (*_credentials_only(), entropy_detector())
 
     contact = tuple(
         detector for detector in DEFAULT_DETECTORS if detector.action is Action.REVERSIBLE
     )
+    # Order is the whole correctness story here, because the first detector
+    # to match a span claims it. Precise formats come before keyword-led
+    # ones: an email address is unambiguous, while the social-handle detector
+    # is "a platform name followed by something", which would otherwise claim
+    # the domain half of an address.
     standard = (
         VENDOR_CREDENTIALS
         + _credentials_only()[len(VENDOR_CREDENTIALS) :]
+        + contact
         + PERSONAL_DATA
         + STRUCTURED_PERSONAL
-        + contact
     )
 
     if level is Level.STANDARD:
-        return standard + (entropy_detector(),)
+        return (*standard, entropy_detector())
     if level is Level.STRICT:
         return standard + special_category_detectors() + (entropy_detector(),)
     return (

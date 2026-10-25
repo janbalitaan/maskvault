@@ -12,7 +12,7 @@ import re
 import pytest
 
 from maskvault import Anonymizer, Level, Whitelist
-from maskvault.whitelist import COMMON_SAFE_VALUES, TECHNICAL_HOMONYMS
+from maskvault.models.whitelist import COMMON_SAFE_VALUES, TECHNICAL_HOMONYMS
 
 
 class TestLabels:

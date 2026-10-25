@@ -25,9 +25,10 @@ identifiers left alone.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 import re
+
+from maskvault.models.entropy_verdict import EntropyVerdict
 
 # Below this, entropy is too noisy to judge.
 MIN_LENGTH = 20
@@ -52,14 +53,14 @@ _BASE64ISH = re.compile(r"^[A-Za-z0-9+/_\-]+={0,2}$")
 # The default alphabet covers token-shaped secrets: API keys, hex digests,
 # base64 blobs. It excludes punctuation on purpose, so a run of prose is not
 # read as one long candidate.
-TOKEN_ALPHABET = r"A-Za-z0-9+/=_\-"
+TOKEN_ALPHABET = r"A-Za-z0-9+/=_\-"  # noqa: S105
 
 # A password is a different shape. It is short, it contains punctuation, and
 # with the token alphabet it splits at the first symbol — "k3yMaterial9xQ!zP"
 # becomes two fragments, neither long enough to judge. This alphabet keeps it
 # whole, at the cost of matching more non-secrets, which is why only the
 # relaxed mode uses it.
-PASSWORD_ALPHABET = r"\S"
+PASSWORD_ALPHABET = r"\S"  # noqa: S105
 
 
 def candidate_pattern(
@@ -88,18 +89,6 @@ _KNOWN_SAFE = (
     # Semantic-version-ish and date-ish runs.
     re.compile(r"^[\d._-]+$"),
 )
-
-
-@dataclass(frozen=True)
-class EntropyVerdict:
-    """Why a candidate was or was not treated as a secret."""
-
-    value: str
-    entropy: float
-    character_classes: int
-    alphabet: str
-    is_secret: bool
-    reason: str
 
 
 def shannon_entropy(text: str) -> float:

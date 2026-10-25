@@ -14,9 +14,6 @@ Two categories, and the distinction matters more than the patterns:
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from enum import Enum
 import re
 
 from maskvault.entropy import (
@@ -25,38 +22,8 @@ from maskvault.entropy import (
     candidate_pattern,
     looks_like_a_secret,
 )
-
-
-class Action(Enum):
-    """What to do with a detected value."""
-
-    REVERSIBLE = "reversible"
-    DESTROY = "destroy"
-
-
-@dataclass(frozen=True)
-class Detector:
-    """One kind of sensitive value.
-
-    `validate` exists because some of these are not really regular
-    expressions. A phone number is "a run of digits and separators that is
-    phone-shaped", and expressing "phone-shaped" in a pattern produced a
-    regex that backtracked into partial matches — the one failure mode a
-    privacy filter cannot have. So the pattern finds candidates generously
-    and a function decides.
-    """
-
-    label: str
-    pattern: re.Pattern[str]
-    action: Action
-    # Shown in place of a destroyed value, so the owner can see it happened.
-    notice: str = "[removed]"
-    validate: Callable[[str], bool] | None = None
-
-    def matches(self, candidate: str) -> bool:
-        """Whether a candidate passes this detector's validator, if it has one."""
-        return self.validate is None or self.validate(candidate)
-
+from maskvault.models.action import Action
+from maskvault.models.detector import Detector
 
 # ISO-8601-ish dates are all over a CV and are not phone numbers.
 _ISO_DATE = re.compile(r"^\d{4}-\d{1,2}(-\d{1,2})?$")
@@ -289,6 +256,7 @@ PERSONAL_DATA: tuple[Detector, ...] = (
         label="passport",
         pattern=re.compile(r"(?i)\bpassport\s*(?:no\.?|number|#)?\s*[:=]?\s*([A-Z0-9]{6,9})\b"),
         action=Action.REVERSIBLE,
+        group=1,
     ),
     Detector(
         label="date_of_birth",
@@ -297,6 +265,7 @@ PERSONAL_DATA: tuple[Detector, ...] = (
             r"(\d{1,4}[-/]\d{1,2}[-/]\d{1,4})"
         ),
         action=Action.REVERSIBLE,
+        group=1,
     ),
 )
 
@@ -306,7 +275,7 @@ PERSONAL_DATA: tuple[Detector, ...] = (
 def entropy_detector(
     min_length: int = 0, relax_by: float = 0.0, include_symbols: bool = False
 ) -> Detector:
-    """The net for secrets whose format nobody anticipated.
+    """Build the net for secrets whose format nobody anticipated.
 
     `relax_by` lowers every entropy threshold and `min_length` shortens the
     candidate. Both catch more real secrets at the cost of more false
@@ -336,5 +305,5 @@ def all_detectors(include_entropy: bool = True) -> tuple[Detector, ...]:
         VENDOR_CREDENTIALS + DEFAULT_DETECTORS[:4] + PERSONAL_DATA + DEFAULT_DETECTORS[4:]
     )
     if include_entropy:
-        detectors = detectors + (entropy_detector(),)
+        detectors = (*detectors, entropy_detector())
     return detectors
