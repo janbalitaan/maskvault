@@ -135,6 +135,93 @@ there is `vault.summary()`, which counts by kind and contains no values:
 "1 age, 2 health, 1 salary, 1 street_address, 1 destroyed"
 ```
 
+## Moving a vault between processes
+
+The common case needs nothing. Anonymize, call the provider and restore in
+one request handler, and the vault is a local variable that never leaves it:
+
+```python
+safe, vault = anonymizer.anonymize(question)
+reply = provider.complete(safe)
+answer = anonymizer.restore(reply, vault)
+```
+
+Scale that to any number of nodes and nothing crosses, because nothing is
+shared. **Adding a store here makes it less private, not more.**
+
+A store is for when the vault has to outlive the request — a multi-turn
+conversation where one person should keep one token, anonymizing on one node
+and restoring on another, or a queue where the worker is a different process.
+
+```python
+from maskvault.ciphers import FernetCipher
+from maskvault.stores import MemoryVaultStore, SerializedVaultStore
+
+MemoryVaultStore()                                      # one process
+SerializedVaultStore(backend, FernetCipher.from_env())   # Redis, Valkey, ...
+DatabaseVaultStore(connection, FernetCipher.from_env())  # PostgreSQL, MySQL
+```
+
+A key-value backend is about ten lines, which is why none of them is a
+dependency here:
+
+```python
+class RedisBackend:
+    def __init__(self, client):
+        self._client = client
+
+    def get(self, key):
+        return self._client.get(key)
+
+    def set(self, key, value, ttl_seconds):
+        self._client.set(key, value, ex=int(ttl_seconds))
+
+    def delete(self, key):
+        self._client.delete(key)
+```
+
+### Encryption is not optional, and not defaulted either
+
+A stored vault holds every original value. It usually goes somewhere with
+wider access than the application — a shared cache, a table, a backup of
+either — while the key stays in the application. Those are different trust
+domains, which is what makes encrypting here worth doing.
+
+So a store refuses to be built without a cipher. There is no secure default
+to fall back to: a key cannot be invented, because a random one per process
+would leave the node that restores unable to decrypt what the node that
+anonymized wrote. And defaulting to plaintext would mean a store that looks
+encrypted to anyone who did not read the signature.
+
+```bash
+pip install 'maskvault[encryption]'
+```
+
+```python
+key = FernetCipher.generate_key()   # once, at deployment, kept somewhere safe
+cipher = FernetCipher(key)          # or FernetCipher.from_env()
+```
+
+Opting out is a thing you have to type, so that it shows in review:
+
+```python
+SerializedVaultStore(backend, PlaintextCipher())   # faster, and visible
+```
+
+`store.describe()` returns a line safe to log at startup. "plaintext" in a
+production log is the kind of thing someone notices; a silent default never
+would be.
+
+### Keep the lifetime short, and the key unshared
+
+Entries expire — fifteen minutes by default — because a vault's lifetime is
+the window in which its values are exposed. A database has no expiry of its
+own, so `DatabaseVaultStore.purge()` has to be called by something.
+
+And key by something two callers cannot share. A conversation id or a request
+id is right; a user id usually is not, because one user has more than one
+conversation, and a shared key hands one caller's values to another.
+
 ## The token format is yours
 
 The default is `!|LABEL_1|!`. Two collisions can break a token and only one

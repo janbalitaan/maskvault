@@ -14,6 +14,7 @@ import string
 import threading
 
 from maskvault.constants import SCOPE_LETTERS
+from maskvault.exceptions import VaultError
 from maskvault.models.token_format import TokenFormat
 
 
@@ -139,6 +140,53 @@ class Vault:
         Which would have removed the one benefit scoping exists for.
         """
         return "".join(secrets.choice(string.ascii_uppercase) for _ in range(SCOPE_LETTERS))
+
+    def as_dict(self) -> dict:
+        """Convert to plain JSON-serializable data, losing nothing.
+
+        This is how a vault reaches another process: a store, a queue, a
+        response body. Every field that restoring depends on is here —
+        including the scope and the format's own patterns, which a
+        hand-rolled version tends to drop. The CLI dropped both, so a scoped
+        vault could not be restored from its own file and a custom format
+        came back with the wrong label pattern.
+
+        What is *not* here: the lock, which means nothing outside this
+        process. `from_dict` makes a new one.
+
+        The result contains every original value. It is as sensitive as the
+        input was, and the choice of where to put it is a security decision —
+        see `maskvault.stores`.
+        """
+        return {
+            "values": self.snapshot(),
+            "destroyed": list(self.destroyed),
+            "scope": self.scope,
+            "token_format": self.token_format.as_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Vault:
+        """Rebuild a vault from `as_dict` output.
+
+        Tolerant of a missing `destroyed`, `scope` or `token_format`, because
+        a vault written by an older version will not have all three. Refuses
+        a payload with no `values`: that is not a vault, and silently treating
+        it as an empty one would turn a wiring mistake into every token
+        coming back unrestored.
+        """
+        if not isinstance(data, dict) or "values" not in data:
+            raise VaultError(
+                'not a vault: no "values" key. A vault is written by '
+                "Vault.as_dict(); a payload without it cannot restore anything."
+            )
+        stored = data.get("token_format")
+        return cls(
+            values=dict(data["values"]),
+            destroyed=list(data.get("destroyed") or []),
+            scope=str(data.get("scope") or ""),
+            token_format=(TokenFormat.from_dict(stored) if stored else TokenFormat.default()),
+        )
 
     def __getstate__(self) -> dict:
         """Drop the lock so a vault can be pickled.

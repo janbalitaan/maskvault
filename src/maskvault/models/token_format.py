@@ -141,6 +141,36 @@ class TokenFormat:
         """
         return f"{self.opening}{label}_{index}{self.closing}"
 
+    @classmethod
+    def from_dict(cls, data: dict) -> TokenFormat:
+        r"""Build a format from plain JSON, so it can live in a config file.
+
+            {
+              "name": "mine",
+              "opening": "<%|",
+              "closing": "|%>",
+              "label_pattern": "[A-Z_]+",
+              "index_pattern": "\\d+",
+              "label_case": "upper"
+            }
+
+        Paired with `as_dict` here rather than in `maskvault.formats`, because
+        a Vault needs to rebuild its own format when it is loaded from a store
+        — and a model reaching upward for that would make the import graph
+        circular.
+        """
+        try:
+            return cls(
+                name=str(data["name"]),
+                opening=str(data["opening"]),
+                closing=str(data["closing"]),
+                label_pattern=str(data.get("label_pattern", r"[A-Z_]+")),
+                index_pattern=str(data.get("index_pattern", r"\d+")),
+                label_case=str(data.get("label_case", "upper")),
+            )
+        except KeyError as error:
+            raise TokenFormatError(f"a token format needs {error.args[0]!r}") from error
+
     def as_dict(self) -> dict:
         """Round-trips with format_from_dict, for writing a config back out."""
         return {

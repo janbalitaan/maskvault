@@ -157,3 +157,9 @@ JSON_KEYS = frozenset(
 # vaults in one deployment will not collide, short enough that the token stays
 # something a model copies back without reformatting it.
 SCOPE_LETTERS = 4
+
+# How long a stored vault lives by default. A vault holds plaintext originals,
+# so its lifetime is the window in which they are exposed — long enough for a
+# provider call and a follow-up, short enough that a forgotten entry does not
+# sit in memory for the life of the process.
+VAULT_TTL_SECONDS = 15 * 60

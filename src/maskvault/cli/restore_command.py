@@ -10,8 +10,8 @@ from typing import TextIO
 from maskvault.anonymizer import Anonymizer
 from maskvault.cli.exit_codes import ExitCode
 from maskvault.cli.reader import InputReader
+from maskvault.exceptions import VaultError
 from maskvault.exceptions.base import MaskvaultError
-from maskvault.models.token_format import TokenFormat
 from maskvault.models.vault import Vault
 
 
@@ -80,23 +80,9 @@ class RestoreCommand:
                 f"the vault at {self._vault_path} is not valid JSON: {error}"
             ) from error
 
-        if not isinstance(data, dict) or "values" not in data:
+        try:
+            return Vault.from_dict(data)
+        except VaultError as error:
             raise MaskvaultError(
-                f"the file at {self._vault_path} is not a vault — it has no "
-                '"values". Was it written by `maskvault anonymize --vault`?'
-            )
-        stored = data.get("token_format") or {}
-        token_format = (
-            TokenFormat(
-                name=str(stored.get("name", "custom")),
-                opening=str(stored["opening"]),
-                closing=str(stored["closing"]),
-            )
-            if stored.get("opening") and stored.get("closing")
-            else TokenFormat.default()
-        )
-        return Vault(
-            values=dict(data["values"]),
-            destroyed=list(data.get("destroyed") or []),
-            token_format=token_format,
-        )
+                f"{error} Was it written by `maskvault anonymize --vault`?"
+            ) from error

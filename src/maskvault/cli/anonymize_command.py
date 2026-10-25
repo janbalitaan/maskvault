@@ -63,23 +63,17 @@ class AnonymizeCommand:
         It holds every original value, so it is as sensitive as the input was.
         Created with 0600 rather than the umask default, because the whole
         point of the exercise was to stop these values being readable.
+
+        Serialized through `Vault.as_dict` rather than by hand. The
+        hand-written version here dropped the scope and the format's own
+        patterns, so a scoped vault could not be restored from its own file
+        and a custom format came back with the wrong label pattern.
         """
         path = self._vault_path
         if path is None:  # pragma: no cover - guarded by the caller
             return
         try:
-            serialized = json.dumps(
-                {
-                    "values": vault.snapshot(),
-                    "destroyed": vault.destroyed,
-                    "token_format": {
-                        "name": vault.token_format.name,
-                        "opening": vault.token_format.opening,
-                        "closing": vault.token_format.closing,
-                    },
-                },
-                indent=2,
-            )
+            serialized = json.dumps(vault.as_dict(), indent=2)
             path.write_text(serialized, encoding="utf-8")
             path.chmod(0o600)
         except OSError as error:

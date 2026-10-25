@@ -30,6 +30,13 @@ classifiers = [
 # privacy filter nobody can audit.
 dependencies = []
 
+[project.optional-dependencies]
+# For encrypting a vault before it is stored. Optional because the common
+# case — anonymize, call a provider, restore, all in one request — never
+# stores a vault at all, and a privacy filter that pulls in a dependency tree
+# is one nobody can audit.
+encryption = ["cryptography>=43.0"]
+
 [project.scripts]
 maskvault = "maskvault.cli:run"
 
@@ -62,6 +69,12 @@ ignore = ["D107", "D203", "D213"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "PLR2004", "ARG", "D"]
+# S608 flags SQL built by interpolation, and it is right that this file does
+# it: a table name and a parameter marker cannot be bound parameters, so both
+# are interpolated. Both are also validated first — the table against
+# `^[A-Za-z_][A-Za-z0-9_]*$`, the marker against a two-element set — and every
+# *value* is bound. tests/stores/test_database_store.py pins the refusals.
+"src/maskvault/stores/database.py" = ["S608"]
 # A public constructor with five independent keyword-only options is clearer
 # than one taking a config object, and the argument count rule does not
 # distinguish the two.
@@ -89,3 +102,10 @@ branch = true
 # `python -m maskvault` — where this process cannot measure it. The test
 # asserting it works is in tests/cli/test_policy_and_entry_points.py.
 omit = ["src/maskvault/__main__.py"]
+
+[[tool.ty.overrides]]
+# An optional extra, absent unless the encryption extra is installed.
+include = ["src/maskvault/ciphers/fernet.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"

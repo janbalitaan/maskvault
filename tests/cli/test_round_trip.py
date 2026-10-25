@@ -112,7 +112,10 @@ class TestRestoreCommand:
         vault = tmp_path / "vault.json"
         vault.write_text('{"something": "else"}')
         assert main(["restore", str(source), "--vault", str(vault)]) == ExitCode.USAGE
-        assert "is not a vault" in capsys.readouterr().err
+        message = capsys.readouterr().err
+        assert "not a vault" in message
+        # And it still points at the command that writes one.
+        assert "maskvault anonymize --vault" in message
 
     def test_an_unrestorable_token_is_reported(self, tmp_path, capsys):
         """A model that reformatted a token leaves one behind, and the reader

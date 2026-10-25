@@ -128,27 +128,13 @@ class TokenFormats:
 
     @staticmethod
     def format_from_dict(data: dict) -> TokenFormat:
-        r"""Build a format from plain JSON, so it can live in a config file.
+        """Build a format from plain JSON.
 
-        {
-          "name": "mine",
-          "opening": "<%|",
-          "closing": "|%>",
-          "label_pattern": "[A-Z_]+",
-          "index_pattern": "\\d+"
-        }
+        Kept as the documented entry point; the construction itself lives on
+        TokenFormat, beside `as_dict`, so that a Vault can rebuild its own
+        format without importing this module.
         """
-        try:
-            return TokenFormat(
-                name=str(data["name"]),
-                opening=str(data["opening"]),
-                closing=str(data["closing"]),
-                label_pattern=str(data.get("label_pattern", r"[A-Z_]+")),
-                index_pattern=str(data.get("index_pattern", r"\d+")),
-                label_case=str(data.get("label_case", "upper")),
-            )
-        except KeyError as error:
-            raise TokenFormatError(f"a token format needs {error.args[0]!r}") from error
+        return TokenFormat.from_dict(data)
 
     @staticmethod
     def choose_format(
