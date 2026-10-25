@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import re
 
-from maskvault.formats import DEFAULT_FORMATS, FORMATS_BY_NAME, choose_format
-from maskvault.levels import detectors_for
+from maskvault.formats import DEFAULT_FORMATS, FORMATS_BY_NAME, TokenFormats
+from maskvault.levels import Levels
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
 from maskvault.models.finding import Finding
@@ -69,7 +69,7 @@ class Anonymizer:
             whitelist if isinstance(whitelist, Whitelist) else Whitelist.from_dict(whitelist)
         )
         self._level = Level(level) if isinstance(level, str) else level
-        chosen = detectors_for(self._level) if detectors is None else detectors
+        chosen = Levels.detectors_for(self._level) if detectors is None else detectors
         self._detectors = tuple(
             detector for detector in chosen if not self._whitelist.allows_label(detector.label)
         )
@@ -89,7 +89,7 @@ class Anonymizer:
 
     def anonymize(self, text: str) -> tuple[str, Vault]:
         """Return text safe to send, plus the vault needed to restore it."""
-        token_format = self._fixed_format or choose_format(text, self._candidates)
+        token_format = self._fixed_format or TokenFormats.choose_format(text, self._candidates)
         vault = Vault(token_format=token_format)
         return self.anonymize_into(text, vault), vault
 

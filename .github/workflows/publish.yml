@@ -17,6 +17,11 @@ name: publish
 # `janbalitaan/maskvault/.github/workflows/publish.yml` — which is what the
 # trusted publisher is configured with.
 #
+# No `environment:` here on purpose. A GitHub environment adds a claim the
+# trusted publisher has to match as well, and its real benefit is a required
+# reviewer before a publish, which this project does not use. One fewer field
+# to agree on is worth more than a protection nobody configured.
+#
 # A published release, not a tag: a tag pushed by mistake can be deleted, a
 # release is a deliberate act. `workflow_dispatch` exists so the path can be
 # rehearsed against TestPyPI before a real release depends on it.
@@ -37,10 +42,6 @@ jobs:
     # distributions between them as an artifact, which costs storage on every
     # release and buys nothing when the two steps are seconds apart.
     runs-on: ubuntu-latest
-    environment:
-      name: >-
-        ${{ (github.event_name == 'release' || inputs.target == 'pypi')
-            && 'pypi' || 'testpypi' }}
     permissions:
       contents: read
       # Trusted publishing exchanges this short-lived OIDC token for an upload
@@ -70,8 +71,16 @@ jobs:
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          # Empty means PyPI. A manual run defaults to TestPyPI so a mis-click
-          # rehearses rather than publishes.
+          # An empty url means PyPI; the TestPyPI url means TestPyPI.
+          #
+          # The condition names the TestPyPI case rather than the PyPI one,
+          # which is not arbitrary. `A && B || C` in an Actions expression is
+          # not a ternary: `&&` yields B when A is truthy, then `||` yields C
+          # when that result is *falsy* — and an empty string is falsy. So
+          # `isPyPI && '' || testUrl` yields the TestPyPI url even when
+          # isPyPI is true, and every release would publish to the wrong
+          # index. Keeping the non-empty value in the true branch avoids it.
           repository-url: >-
-            ${{ (github.event_name == 'release' || inputs.target == 'pypi')
-                && '' || 'https://test.pypi.org/legacy/' }}
+            ${{ (github.event_name == 'workflow_dispatch'
+                 && inputs.target == 'testpypi')
+                && 'https://test.pypi.org/legacy/' || '' }}

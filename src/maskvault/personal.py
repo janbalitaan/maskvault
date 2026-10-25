@@ -149,28 +149,37 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
 # keeps the surrounding sentence usable while the word itself stays private.
 
 
-def category_detector(category: str, terms: frozenset[str]) -> Detector:
-    """Build one detector that matches any term in a category.
+class SpecialCategories:
+    """Builds detectors for the GDPR Article 9 special categories.
 
-    Terms are sorted longest first so "heart attack" wins over "heart", and
-    each is word-bounded so "bi" does not match inside "big".
+    Health, religion, politics, identity and origin, plus criminal and
+    financial history. These are vocabulary-driven rather than pattern-driven:
+    there is no shape to a religion, only a list of words.
     """
-    ordered = sorted(terms, key=len, reverse=True)
-    alternation = "|".join(re.escape(term) for term in ordered)
-    return Detector(
-        label=category,
-        pattern=re.compile(rf"\b(?:{alternation})\b", re.I),
-        action=Action.REVERSIBLE,
-    )
 
+    @staticmethod
+    def category_detector(category: str, terms: frozenset[str]) -> Detector:
+        """Build one detector that matches any term in a category.
 
-def special_category_detectors(
-    categories: tuple[str, ...] | None = None,
-) -> tuple[Detector, ...]:
-    """Detectors for the special categories, all of them by default."""
-    chosen = categories or tuple(SPECIAL_CATEGORIES)
-    return tuple(
-        category_detector(name, SPECIAL_CATEGORIES[name])
-        for name in chosen
-        if name in SPECIAL_CATEGORIES
-    )
+        Terms are sorted longest first so "heart attack" wins over "heart", and
+        each is word-bounded so "bi" does not match inside "big".
+        """
+        ordered = sorted(terms, key=len, reverse=True)
+        alternation = "|".join(re.escape(term) for term in ordered)
+        return Detector(
+            label=category,
+            pattern=re.compile(rf"\b(?:{alternation})\b", re.I),
+            action=Action.REVERSIBLE,
+        )
+
+    @staticmethod
+    def special_category_detectors(
+        categories: tuple[str, ...] | None = None,
+    ) -> tuple[Detector, ...]:
+        """Detectors for the special categories, all of them by default."""
+        chosen = categories or tuple(SPECIAL_CATEGORIES)
+        return tuple(
+            SpecialCategories.category_detector(name, SPECIAL_CATEGORIES[name])
+            for name in chosen
+            if name in SPECIAL_CATEGORIES
+        )

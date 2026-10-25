@@ -6,7 +6,8 @@ import re
 
 import pytest
 
-from maskvault import Anonymizer, is_phone_shaped
+from maskvault import Anonymizer
+from maskvault.detectors import PhoneShape
 
 
 @pytest.fixture
@@ -63,4 +64,4 @@ class TestPhoneNumbers:
         ],
     )
     def test_shape_check(self, candidate, expected):
-        assert is_phone_shaped(candidate) is expected
+        assert PhoneShape.looks_like_a_phone_number(candidate) is expected

@@ -86,3 +86,9 @@ TRAILING_PUNCTUATION = " .,;:!?\"'()[]{}<>"
 # otherwise recurse forever, and a depth cap is cheaper than checking every
 # node for a cycle.
 MAX_STRUCTURE_DEPTH = 64
+
+# How much of a structure's text to read before choosing a token format. The
+# format only has to avoid colliding with delimiters already in the text, and
+# a few kilobytes is a representative sample of any structure — walking a
+# large one in full would cost more than the choice is worth.
+SAMPLE_LIMIT = 4096

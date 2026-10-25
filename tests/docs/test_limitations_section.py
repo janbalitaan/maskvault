@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from importlib.metadata import requires
 
-from maskvault import Anonymizer, Level, shannon_entropy
+from maskvault import Anonymizer, Level
+from maskvault.entropy import Entropy
 
 
 class TestLimitationsSection:
@@ -30,11 +31,11 @@ class TestLimitationsSection:
 
     def test_the_aws_key_entropy_figure(self):
         """README cites 3.68 bits for an AWS access key id."""
-        assert round(shannon_entropy("AKIAIOSFODNN7EXAMPLE"), 2) == 3.68
+        assert round(Entropy.shannon_entropy("AKIAIOSFODNN7EXAMPLE"), 2) == 3.68
 
     def test_the_quick_brown_fox_figure(self):
         """README: 'the quick brown fox jumps scores above 4 bits'."""
-        assert shannon_entropy("the quick brown fox jumps") > 4.0
+        assert Entropy.shannon_entropy("the quick brown fox jumps") > 4.0
 
     def test_it_has_no_dependencies(self):
         """README: 'No dependencies'. The packaged metadata has to agree.

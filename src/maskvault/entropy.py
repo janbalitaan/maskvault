@@ -47,123 +47,142 @@ _BASE64ISH = re.compile(r"^[A-Za-z0-9+/_\-]+={0,2}$")
 # whitespace and the punctuation that surrounds values in real text.
 
 
-def candidate_pattern(
-    min_length: int = ENTROPY_MIN_LENGTH, include_symbols: bool = False
-) -> re.Pattern[str]:
-    """Candidate tokens of at least `min_length` characters.
+class Entropy:
+    """Measures how much a candidate looks generated rather than written.
 
-    `include_symbols` widens the alphabet to any non-space character, which
-    keeps a punctuated password in one piece.
+    Static methods throughout: there is no state to carry, and the four
+    conditions above are a calculation rather than a configuration. Grouping
+    them names the subject, so a reader looking for "how does this decide
+    something is random" has one place to go.
     """
-    alphabet = PASSWORD_ALPHABET if include_symbols else TOKEN_ALPHABET
-    return re.compile(rf"[{alphabet}]{{{max(min_length, 8)},}}")
 
+    @staticmethod
+    def candidate_pattern(
+        min_length: int = ENTROPY_MIN_LENGTH, include_symbols: bool = False
+    ) -> re.Pattern[str]:
+        """Candidate tokens of at least `min_length` characters.
 
-CANDIDATE = candidate_pattern()
+        `include_symbols` widens the alphabet to any non-space character, which
+        keeps a punctuated password in one piece.
+        """
+        alphabet = PASSWORD_ALPHABET if include_symbols else TOKEN_ALPHABET
+        return re.compile(rf"[{alphabet}]{{{max(min_length, 8)},}}")
 
-# Shapes that are long and random-looking but are not secrets. Checked before
-# entropy, because each would otherwise be a confident false positive.
-_KNOWN_SAFE = (
-    # A UUID identifies something; it is not a credential on its own.
-    re.compile(
-        r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-    ),
-    # A git commit SHA.
-    re.compile(r"^[0-9a-f]{40}$"),
-    # Semantic-version-ish and date-ish runs.
-    re.compile(r"^[\d._-]+$"),
-)
-
-
-def classify(
-    candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
-) -> EntropyVerdict:
-    """Decide whether a single token looks like a secret.
-
-    `relax_by` lowers each threshold, trading false positives for coverage.
-    """
-    classes = TextMetrics.character_classes(candidate)
-    entropy = TextMetrics.shannon_entropy(candidate)
-    min_length = max(min_length, 8)
-
-    # Whitespace means this is prose, not a token. Checked first because it
-    # is the strongest signal available: entropy cannot tell a varied English
-    # phrase from a generated string, and this can.
-    if TextMetrics.contains_whitespace(candidate):
-        return EntropyVerdict(
-            candidate, entropy, classes, "prose", False, "contains whitespace, so not a token"
-        )
-
-    if len(candidate) < min_length:
-        return EntropyVerdict(candidate, entropy, classes, "short", False, "too short to judge")
-
-    for safe in _KNOWN_SAFE:
-        if safe.match(candidate):
-            return EntropyVerdict(
-                candidate, entropy, classes, "known", False, "a known non-secret shape"
-            )
-
-    if _HEX.match(candidate):
-        alphabet, threshold = "hex", HEX_THRESHOLD - relax_by
-    elif _BASE64ISH.match(candidate):
-        alphabet, threshold = "base64", BASE64_THRESHOLD - relax_by
-    else:
-        alphabet, threshold = "mixed", MIXED_THRESHOLD - relax_by
-
-    if entropy < threshold:
-        return EntropyVerdict(
-            candidate,
-            entropy,
-            classes,
-            alphabet,
-            False,
-            f"entropy {entropy:.2f} below {threshold} for {alphabet}",
-        )
-
-    # Hex is single-class by definition, so the diversity rule cannot apply.
-    if alphabet != "hex" and classes < MIN_CHARACTER_CLASSES:
-        return EntropyVerdict(
-            candidate,
-            entropy,
-            classes,
-            alphabet,
-            False,
-            f"only {classes} character class",
-        )
-
-    return EntropyVerdict(
-        candidate,
-        entropy,
-        classes,
-        alphabet,
-        True,
-        f"entropy {entropy:.2f} over {threshold} for {alphabet}",
+    # Shapes that are long and random-looking but are not secrets. Checked before
+    # entropy, because each would otherwise be a confident false positive.
+    # Values that measure as random but are known not to be secrets.
+    _KNOWN_SAFE = (
+        # A UUID identifies something; it is not a credential on its own.
+        re.compile(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        ),
+        # A git commit SHA.
+        re.compile(r"^[0-9a-f]{40}$"),
+        # Semantic-version-ish and date-ish runs.
+        re.compile(r"^[\d._-]+$"),
     )
 
+    @staticmethod
+    def classify(
+        candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
+    ) -> EntropyVerdict:
+        """Decide whether a single token looks like a secret.
 
-def find_secrets(text: str) -> list[EntropyVerdict]:
-    """Every token in the text that looks like a secret."""
-    seen: set[str] = set()
-    verdicts = []
-    for match in CANDIDATE.finditer(text):
-        candidate = match.group(0)
-        if candidate in seen:
-            continue
-        seen.add(candidate)
-        verdict = classify(candidate)
-        if verdict.is_secret:
-            verdicts.append(verdict)
-    return verdicts
+        `relax_by` lowers each threshold, trading false positives for coverage.
+        """
+        classes = TextMetrics.character_classes(candidate)
+        entropy = TextMetrics.shannon_entropy(candidate)
+        min_length = max(min_length, 8)
+
+        # Whitespace means this is prose, not a token. Checked first because it
+        # is the strongest signal available: entropy cannot tell a varied English
+        # phrase from a generated string, and this can.
+        if TextMetrics.contains_whitespace(candidate):
+            return EntropyVerdict(
+                candidate,
+                entropy,
+                classes,
+                "prose",
+                False,
+                "contains whitespace, so not a token",
+            )
+
+        if len(candidate) < min_length:
+            return EntropyVerdict(
+                candidate, entropy, classes, "short", False, "too short to judge"
+            )
+
+        for safe in Entropy._KNOWN_SAFE:
+            if safe.match(candidate):
+                return EntropyVerdict(
+                    candidate, entropy, classes, "known", False, "a known non-secret shape"
+                )
+
+        if _HEX.match(candidate):
+            alphabet, threshold = "hex", HEX_THRESHOLD - relax_by
+        elif _BASE64ISH.match(candidate):
+            alphabet, threshold = "base64", BASE64_THRESHOLD - relax_by
+        else:
+            alphabet, threshold = "mixed", MIXED_THRESHOLD - relax_by
+
+        if entropy < threshold:
+            return EntropyVerdict(
+                candidate,
+                entropy,
+                classes,
+                alphabet,
+                False,
+                f"entropy {entropy:.2f} below {threshold} for {alphabet}",
+            )
+
+        # Hex is single-class by definition, so the diversity rule cannot apply.
+        if alphabet != "hex" and classes < MIN_CHARACTER_CLASSES:
+            return EntropyVerdict(
+                candidate,
+                entropy,
+                classes,
+                alphabet,
+                False,
+                f"only {classes} character class",
+            )
+
+        return EntropyVerdict(
+            candidate,
+            entropy,
+            classes,
+            alphabet,
+            True,
+            f"entropy {entropy:.2f} over {threshold} for {alphabet}",
+        )
+
+    @staticmethod
+    def find_secrets(text: str) -> list[EntropyVerdict]:
+        """Every token in the text that looks like a secret."""
+        seen: set[str] = set()
+        verdicts = []
+        for match in CANDIDATE.finditer(text):
+            candidate = match.group(0)
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            verdict = Entropy.classify(candidate)
+            if verdict.is_secret:
+                verdicts.append(verdict)
+        return verdicts
+
+    @staticmethod
+    def looks_like_a_secret(
+        candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
+    ) -> bool:
+        """Whether a token should be treated as a secret. Used as a Detector validator."""
+        return Entropy.classify(candidate, relax_by=relax_by, min_length=min_length).is_secret
+
+    # The measurement functions moved to utils.text when the domain logic and the
+    # arithmetic were separated. Kept as names here because they are public API.
+    shannon_entropy = TextMetrics.shannon_entropy
+    character_classes = TextMetrics.character_classes
 
 
-def looks_like_a_secret(
-    candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
-) -> bool:
-    """Whether a token should be treated as a secret. Used as a Detector validator."""
-    return classify(candidate, relax_by=relax_by, min_length=min_length).is_secret
-
-
-# The measurement functions moved to utils.text when the domain logic and the
-# arithmetic were separated. Kept as names here because they are public API.
-shannon_entropy = TextMetrics.shannon_entropy
-character_classes = TextMetrics.character_classes
+# Built once at import, because the default candidate pattern never varies and
+# compiling it per call showed up in a profile.
+CANDIDATE = Entropy.candidate_pattern()

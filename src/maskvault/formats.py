@@ -80,62 +80,71 @@ FORMATS_BY_NAME: dict[str, TokenFormat] = {
 }
 
 
-def random_format(name: str = "random", length: int = 6) -> TokenFormat:
-    """Generate a format with unguessable delimiters.
+class TokenFormats:
+    """Builds the token format a run will use.
 
-    Two reasons to want this. A delimiter nobody can predict will not collide
-    with anything in the text, whatever markup it uses. And when the text is
-    going somewhere that might try to inject content back — a model
-    processing untrusted input, for instance — text that cannot guess the
-    delimiter cannot forge a token that restore would expand.
-
-    The delimiters are not secret in any cryptographic sense; they are
-    unpredictable, which is a different and weaker property. It raises the
-    cost of forging a token; it does not make it impossible.
+    Static methods: a format is derived from its arguments and the text it has
+    to survive, with no state to carry between calls. Grouping them means a
+    reader looking for "how do I get a format" has one place to look.
     """
-    alphabet = string.ascii_uppercase + string.digits
-    marker = "".join(secrets.choice(alphabet) for _ in range(length))
-    return TokenFormat(name=name, opening=f"<{marker}:", closing=f":{marker}>")
 
+    @staticmethod
+    def random_format(name: str = "random", length: int = 6) -> TokenFormat:
+        """Generate a format with unguessable delimiters.
 
-def format_from_dict(data: dict) -> TokenFormat:
-    r"""Build a format from plain JSON, so it can live in a config file.
+        Two reasons to want this. A delimiter nobody can predict will not collide
+        with anything in the text, whatever markup it uses. And when the text is
+        going somewhere that might try to inject content back — a model
+        processing untrusted input, for instance — text that cannot guess the
+        delimiter cannot forge a token that restore would expand.
 
-    {
-      "name": "mine",
-      "opening": "<%|",
-      "closing": "|%>",
-      "label_pattern": "[A-Z_]+",
-      "index_pattern": "\\d+"
-    }
-    """
-    try:
-        return TokenFormat(
-            name=str(data["name"]),
-            opening=str(data["opening"]),
-            closing=str(data["closing"]),
-            label_pattern=str(data.get("label_pattern", r"[A-Z_]+")),
-            index_pattern=str(data.get("index_pattern", r"\d+")),
-            label_case=str(data.get("label_case", "upper")),
-        )
-    except KeyError as error:
-        raise TokenFormatError(f"a token format needs {error.args[0]!r}") from error
+        The delimiters are not secret in any cryptographic sense; they are
+        unpredictable, which is a different and weaker property. It raises the
+        cost of forging a token; it does not make it impossible.
+        """
+        alphabet = string.ascii_uppercase + string.digits
+        marker = "".join(secrets.choice(alphabet) for _ in range(length))
+        return TokenFormat(name=name, opening=f"<{marker}:", closing=f":{marker}>")
 
+    @staticmethod
+    def format_from_dict(data: dict) -> TokenFormat:
+        r"""Build a format from plain JSON, so it can live in a config file.
 
-def choose_format(
-    text: str, candidates: tuple[TokenFormat, ...] = DEFAULT_FORMATS
-) -> TokenFormat:
-    """Pick the first candidate whose delimiters are absent from the text.
+        {
+          "name": "mine",
+          "opening": "<%|",
+          "closing": "|%>",
+          "label_pattern": "[A-Z_]+",
+          "index_pattern": "\\d+"
+        }
+        """
+        try:
+            return TokenFormat(
+                name=str(data["name"]),
+                opening=str(data["opening"]),
+                closing=str(data["closing"]),
+                label_pattern=str(data.get("label_pattern", r"[A-Z_]+")),
+                index_pattern=str(data.get("index_pattern", r"\d+")),
+                label_case=str(data.get("label_case", "upper")),
+            )
+        except KeyError as error:
+            raise TokenFormatError(f"a token format needs {error.args[0]!r}") from error
 
-    `candidates` is yours to supply: pass your own formats, in your own order
-    of preference, and the first one that fits the text is used. Falls back to
-    the last candidate when every one collides — with the built-in list that
-    means the text already contains characters almost nobody types, and a
-    caller worried about even that case should pass `random_format()`.
-    """
-    if not candidates:
-        raise TokenFormatError("choose_format needs at least one candidate format")
-    for candidate in candidates:
-        if not candidate.collides_with(text):
-            return candidate
-    return candidates[-1]
+    @staticmethod
+    def choose_format(
+        text: str, candidates: tuple[TokenFormat, ...] = DEFAULT_FORMATS
+    ) -> TokenFormat:
+        """Pick the first candidate whose delimiters are absent from the text.
+
+        `candidates` is yours to supply: pass your own formats, in your own order
+        of preference, and the first one that fits the text is used. Falls back to
+        the last candidate when every one collides — with the built-in list that
+        means the text already contains characters almost nobody types, and a
+        caller worried about even that case should pass `TokenFormats.random_format()`.
+        """
+        if not candidates:
+            raise TokenFormatError("choose_format needs at least one candidate format")
+        for candidate in candidates:
+            if not candidate.collides_with(text):
+                return candidate
+        return candidates[-1]

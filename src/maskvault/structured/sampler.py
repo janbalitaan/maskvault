@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from maskvault.constants import MAX_STRUCTURE_DEPTH
+from maskvault.constants import MAX_STRUCTURE_DEPTH, SAMPLE_LIMIT
 
 
 class TextSampler:
@@ -33,6 +33,18 @@ class TextSampler:
     def text(self) -> str:
         """Everything gathered, as one string."""
         return " ".join(self._pieces)
+
+    @classmethod
+    def sample(cls, data: Any, limit: int = SAMPLE_LIMIT) -> str:
+        """Return enough of a structure's text to choose a token format.
+
+        A classmethod rather than a free function: collecting a sample is
+        this class's job, and a caller should not have to build one, drive it
+        and read it back to get the one thing they wanted.
+        """
+        sampler = cls(limit)
+        sampler.collect(data)
+        return sampler.text()
 
     def collect(self, node: Any, depth: int = 0) -> None:
         """Walk a node, gathering its strings."""

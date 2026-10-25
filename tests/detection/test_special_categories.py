@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level
-from maskvault.personal import special_category_detectors
+from maskvault.personal import SpecialCategories
 from maskvault.vocabularies import SPECIAL_CATEGORIES
 
 
@@ -17,7 +17,7 @@ def strict() -> Anonymizer:
 class TestSpecialCategories:
     @pytest.mark.parametrize("category", list(SPECIAL_CATEGORIES))
     def test_every_category_has_a_detector(self, category):
-        labels = {detector.label for detector in special_category_detectors()}
+        labels = {detector.label for detector in SpecialCategories.special_category_detectors()}
         assert category in labels
 
     @pytest.mark.parametrize(

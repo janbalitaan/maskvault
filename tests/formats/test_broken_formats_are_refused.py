@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from maskvault.formats import DEFAULT_FORMATS, choose_format
+from maskvault.formats import DEFAULT_FORMATS, TokenFormats
 from maskvault.models.token_format import TokenFormat
 
 
@@ -30,7 +30,7 @@ class TestBrokenFormatsAreRefused:
 
     def test_choosing_from_no_candidates_is_refused(self):
         with pytest.raises(ValueError, match="at least one"):
-            choose_format("text", ())
+            TokenFormats.choose_format("text", ())
 
     def test_every_built_in_format_is_valid(self):
         """The validation applies to the library's own formats too."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level
-from maskvault.formats import format_from_dict, random_format
+from maskvault.formats import TokenFormats
 from maskvault.models.token_format import TokenFormat
 
 
@@ -50,14 +50,16 @@ class TestCustomFormats:
         assert Anonymizer(format_candidates=(mine,)).format_candidates == (mine,)
 
     def test_a_random_format_is_unguessable_and_works(self):
-        anonymizer = Anonymizer(token_format=random_format(), terms={"ORG": ["Acme"]})
+        anonymizer = Anonymizer(
+            token_format=TokenFormats.random_format(), terms={"ORG": ["Acme"]}
+        )
         text = "I work at Acme"
         safe, vault = anonymizer.anonymize(text)
         assert "Acme" not in safe
         assert anonymizer.restore(safe, vault) == text
 
     def test_two_random_formats_differ(self):
-        assert random_format().opening != random_format().opening
+        assert TokenFormats.random_format().opening != TokenFormats.random_format().opening
 
     def test_a_format_round_trips_through_config(self):
         custom = TokenFormat(
@@ -67,7 +69,7 @@ class TestCustomFormats:
             label_pattern=r"[a-z_]+",
             label_case="lower",
         )
-        assert format_from_dict(custom.as_dict()) == custom
+        assert TokenFormats.format_from_dict(custom.as_dict()) == custom
 
     def test_label_case_and_label_pattern_are_validated_together(self):
         """They can only drift apart once, at construction, rather than
@@ -77,4 +79,4 @@ class TestCustomFormats:
 
     def test_config_without_required_keys_is_rejected(self):
         with pytest.raises(ValueError, match="opening"):
-            format_from_dict({"name": "incomplete"})
+            TokenFormats.format_from_dict({"name": "incomplete"})

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from maskvault import Anonymizer, Level, detectors_for
+from maskvault import Anonymizer, Level
+from maskvault.levels import Levels
 
 CREDENTIAL = "AKIAIOSFODNN7EXAMPLE"
 
@@ -15,16 +16,17 @@ CONTACT = "me@example.com"
 class TestOrderingAndComposition:
     def test_levels_grow_monotonically(self):
         counts = [
-            len(detectors_for(level)) for level in (Level.MINIMAL, Level.STANDARD, Level.STRICT)
+            len(Levels.detectors_for(level))
+            for level in (Level.MINIMAL, Level.STANDARD, Level.STRICT)
         ]
         assert counts == sorted(counts)
 
     def test_a_level_accepts_its_string_name(self):
-        assert len(detectors_for("strict")) == len(detectors_for(Level.STRICT))
+        assert len(Levels.detectors_for("strict")) == len(Levels.detectors_for(Level.STRICT))
 
     def test_an_unknown_level_name_is_rejected(self):
         with pytest.raises(ValueError):
-            detectors_for("extremely-strict")
+            Levels.detectors_for("extremely-strict")
 
     def test_a_known_format_keeps_its_label(self):
         """Specific detectors must run before the entropy net, or a vendor key

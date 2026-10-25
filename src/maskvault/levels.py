@@ -21,67 +21,77 @@ outright, or a `Whitelist` to let individual things back through.
 from __future__ import annotations
 
 from maskvault.constants import PARANOID_MIN_LENGTH, PARANOID_RELAX_BY
-from maskvault.detectors import (
-    DEFAULT_DETECTORS,
-    PERSONAL_DATA,
-    VENDOR_CREDENTIALS,
-    entropy_detector,
-)
+from maskvault.detectors.entropy import EntropyDetector
+from maskvault.detectors.general import DEFAULT_DETECTORS
+from maskvault.detectors.identifiers import PERSONAL_DATA
+from maskvault.detectors.vendor import VENDOR_CREDENTIALS
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
 from maskvault.models.level import Level
-from maskvault.personal import STRUCTURED_PERSONAL, special_category_detectors
+from maskvault.personal import STRUCTURED_PERSONAL, SpecialCategories
 
 
-def detectors_for(level: Level | str = Level.STANDARD) -> tuple[Detector, ...]:
-    """Build the detector set for a strictness level.
+class Levels:
+    """Maps a strictness level to the detectors it implies.
 
-    Order matters throughout: specific formats before generic ones, and the
-    entropy net last, so a known format is labeled rather than destroyed as
-    an anonymous high-entropy blob.
+    The levels are the main dial a caller turns, so what each one includes is
+    the most important thing in this module to be able to read at a glance.
     """
-    level = Level(level) if isinstance(level, str) else level
 
-    if level is Level.MINIMAL:
-        return (*_credentials_only(), entropy_detector())
+    @staticmethod
+    def detectors_for(level: Level | str = Level.STANDARD) -> tuple[Detector, ...]:
+        """Build the detector set for a strictness level.
 
-    contact = tuple(
-        detector for detector in DEFAULT_DETECTORS if detector.action is Action.REVERSIBLE
-    )
-    # Order is the whole correctness story here, because the first detector
-    # to match a span claims it. Precise formats come before keyword-led
-    # ones: an email address is unambiguous, while the social-handle detector
-    # is "a platform name followed by something", which would otherwise claim
-    # the domain half of an address.
-    standard = (
-        VENDOR_CREDENTIALS
-        + _credentials_only()[len(VENDOR_CREDENTIALS) :]
-        + contact
-        + PERSONAL_DATA
-        + STRUCTURED_PERSONAL
-    )
+        Order matters throughout: specific formats before generic ones, and the
+        entropy net last, so a known format is labeled rather than destroyed as
+        an anonymous high-entropy blob.
+        """
+        level = Level(level) if isinstance(level, str) else level
 
-    if level is Level.STANDARD:
-        return (*standard, entropy_detector())
-    if level is Level.STRICT:
-        return standard + special_category_detectors() + (entropy_detector(),)
-    return (
-        standard
-        + special_category_detectors()
-        # A lower bar and a wider alphabet catch more real secrets, including
-        # punctuated passwords, and more false positives. That is the trade
-        # PARANOID exists to make.
-        + (
-            entropy_detector(
-                min_length=PARANOID_MIN_LENGTH,
-                relax_by=PARANOID_RELAX_BY,
-                include_symbols=True,
-            ),
+        if level is Level.MINIMAL:
+            return (*Levels._credentials_only(), EntropyDetector.build())
+
+        contact = tuple(
+            detector for detector in DEFAULT_DETECTORS if detector.action is Action.REVERSIBLE
         )
-    )
+        # Order is the whole correctness story here, because the first detector
+        # to match a span claims it. Precise formats come before keyword-led
+        # ones: an email address is unambiguous, while the social-handle detector
+        # is "a platform name followed by something", which would otherwise claim
+        # the domain half of an address.
+        standard = (
+            VENDOR_CREDENTIALS
+            + Levels._credentials_only()[len(VENDOR_CREDENTIALS) :]
+            + contact
+            + PERSONAL_DATA
+            + STRUCTURED_PERSONAL
+        )
 
+        if level is Level.STANDARD:
+            return (*standard, EntropyDetector.build())
+        if level is Level.STRICT:
+            return (
+                standard
+                + SpecialCategories.special_category_detectors()
+                + (EntropyDetector.build(),)
+            )
+        return (
+            standard
+            + SpecialCategories.special_category_detectors()
+            # A lower bar and a wider alphabet catch more real secrets, including
+            # punctuated passwords, and more false positives. That is the trade
+            # PARANOID exists to make.
+            + (
+                EntropyDetector.build(
+                    min_length=PARANOID_MIN_LENGTH,
+                    relax_by=PARANOID_RELAX_BY,
+                    include_symbols=True,
+                ),
+            )
+        )
 
-def _credentials_only() -> tuple[Detector, ...]:
-    return VENDOR_CREDENTIALS + tuple(
-        detector for detector in DEFAULT_DETECTORS if detector.action is Action.DESTROY
-    )
+    @staticmethod
+    def _credentials_only() -> tuple[Detector, ...]:
+        return VENDOR_CREDENTIALS + tuple(
+            detector for detector in DEFAULT_DETECTORS if detector.action is Action.DESTROY
+        )

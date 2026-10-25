@@ -40,20 +40,18 @@ not much of a privacy filter.
 """
 
 from maskvault.anonymizer import Anonymizer
-from maskvault.constants import TOKEN_TEMPLATE
+from maskvault.constants import PHONE_MAX_DIGITS, PHONE_MIN_DIGITS, TOKEN_TEMPLATE
 from maskvault.detectors import (
     DEFAULT_DETECTORS,
     PERSONAL_DATA,
-    PHONE_MAX_DIGITS,
-    PHONE_MIN_DIGITS,
     VENDOR_CREDENTIALS,
-    all_detectors,
-    entropy_detector,
-    is_phone_shaped,
+    EntropyDetector,
+    PhoneShape,
+    Registry,
 )
-from maskvault.entropy import classify, find_secrets, shannon_entropy
-from maskvault.formats import DEFAULT_FORMATS, choose_format, random_format
-from maskvault.levels import detectors_for
+from maskvault.entropy import Entropy
+from maskvault.formats import DEFAULT_FORMATS, TokenFormats
+from maskvault.levels import Levels
 from maskvault.models import (
     Action,
     Detector,
@@ -65,7 +63,7 @@ from maskvault.models import (
     Whitelist,
 )
 from maskvault.patterns import TOKEN as TOKEN_PATTERN
-from maskvault.personal import STRUCTURED_PERSONAL, special_category_detectors
+from maskvault.personal import STRUCTURED_PERSONAL, SpecialCategories
 from maskvault.structured import anonymize_data, restore_data
 from maskvault.vocabularies import (
     COMMON_SAFE_VALUES,
@@ -89,24 +87,21 @@ __all__ = [
     "Action",
     "Anonymizer",
     "Detector",
+    "Entropy",
+    "EntropyDetector",
     "EntropyVerdict",
     "Finding",
     "Level",
+    "Levels",
+    "PhoneShape",
+    "Registry",
+    "SpecialCategories",
     "TokenFormat",
+    "TokenFormats",
     "Vault",
     "Whitelist",
     "__version__",
-    "all_detectors",
     "anonymize_data",
-    "choose_format",
-    "classify",
-    "detectors_for",
-    "entropy_detector",
-    "find_secrets",
-    "is_phone_shaped",
-    "random_format",
     "restore_data",
-    "shannon_entropy",
-    "special_category_detectors",
 ]
 __version__ = "0.1.0"
