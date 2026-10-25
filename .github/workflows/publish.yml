@@ -1,19 +1,77 @@
 name: publish
 
-# A published release, not a tag. A tag pushed by mistake can be deleted; a
-# release is a deliberate act.
+# The publish job is spelled out here rather than calling a reusable workflow,
+# and that is not a style choice. PyPI's trusted publishing matches on the
+# workflow that performs the upload, and a reusable workflow cannot be named
+# as the publisher at all:
+#
+#   https://docs.pypi.org/trusted-publishers/troubleshooting/
+#   https://github.com/pypi/warehouse/issues/11096
+#
+# Calling one makes PyPI see `job_workflow_ref` pointing at the template
+# repository, which no publisher configuration can match, and the upload is
+# refused with `invalid-publisher`.
+#
+# The composite actions below are still shared from pipeline-templates. Those
+# run inside this workflow rather than replacing it, so the OIDC claim stays
+# `janbalitaan/maskvault/.github/workflows/publish.yml` — which is what the
+# trusted publisher is configured with.
+#
+# A published release, not a tag: a tag pushed by mistake can be deleted, a
+# release is a deliberate act. `workflow_dispatch` exists so the path can be
+# rehearsed against TestPyPI before a real release depends on it.
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      target:
+        description: 'Where to publish. Use testpypi to rehearse.'
+        type: choice
+        options: [testpypi, pypi]
+        default: testpypi
 
 jobs:
   publish:
-    uses: janbalitaan/pipeline-templates/.github/workflows/python-publish.yml@main
+    # One job on purpose. Splitting build and publish would mean passing the
+    # distributions between them as an artifact, which costs storage on every
+    # release and buys nothing when the two steps are seconds apart.
+    runs-on: ubuntu-latest
+    environment:
+      name: >-
+        ${{ (github.event_name == 'release' || inputs.target == 'pypi')
+            && 'pypi' || 'testpypi' }}
     permissions:
       contents: read
-      # A reusable workflow cannot grant itself more than the caller has, so
-      # the OIDC permission that trusted publishing needs is granted here.
+      # Trusted publishing exchanges this short-lived OIDC token for an upload
+      # token. Nothing long-lived is stored, so there is nothing to rotate.
       id-token: write
-    with:
-      environment: pypi
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: janbalitaan/pipeline-templates/python/setup@main
+        with:
+          python-version: '3.12'
+          sync-args: --all-extras
+
+      # Re-run the checks before publishing. Shipping a version that fails its
+      # own tests is worse than shipping late.
+      - uses: janbalitaan/pipeline-templates/python/gate@main
+        with:
+          source-dir: src
+          test-dir: tests
+          max-complexity: '15'
+
+      - uses: janbalitaan/pipeline-templates/python/build@main
+        with:
+          verify-tag: 'true'
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Empty means PyPI. A manual run defaults to TestPyPI so a mis-click
+          # rehearses rather than publishes.
+          repository-url: >-
+            ${{ (github.event_name == 'release' || inputs.target == 'pypi')
+                && '' || 'https://test.pypi.org/legacy/' }}
