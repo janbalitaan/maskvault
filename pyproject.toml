@@ -82,7 +82,7 @@ ignore = ["D107", "D203", "D213"]
 # are interpolated. Both are also validated first — the table against
 # `^[A-Za-z_][A-Za-z0-9_]*$`, the marker against a two-element set — and every
 # *value* is bound. tests/stores/test_database_store.py pins the refusals.
-"src/maskvault/stores/database.py" = ["S608"]
+"src/maskvault/stores/database.py" = ["S608", "PLR0913"]
 # A public constructor with five independent keyword-only options is clearer
 # than one taking a config object, and the argument count rule does not
 # distinguish the two.

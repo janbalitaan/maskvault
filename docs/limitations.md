@@ -41,6 +41,34 @@ What *is* worth encrypting is a stored vault, where the key stays in your
 application and the ciphertext goes elsewhere. See
 [encryption](encryption.md).
 
+## A reply that returns only some of the values
+
+Three values go out, the reply mentions two. That is ordinary — a reply need
+not repeat everything it was given — so nothing is wrong and `leaked()` stays
+quiet. Whether it is *acceptable* is your call, not this library's: a
+summarizer mentioning two of three contacts is fine, a form-filler returning
+two of three fields is a failure.
+
+Both questions are answerable, and the pair is what separates the cases:
+
+```python
+resolved = anonymizer.resolved(reply, vault)     # came back intact
+leftover = anonymizer.leaked(reply, vault)       # came back broken
+```
+
+| resolved | leaked | meaning |
+| --- | --- | --- |
+| 3 of 3 | 0 | everything came back |
+| 2 of 3 | 0 | one was not mentioned — usually fine |
+| 2 of 3 | 1 | one was mangled — the reply has lost a value |
+
+The middle and bottom rows have the same `resolved` count, which is why
+`leaked()` is not optional: it is the only thing that tells an omission from
+a loss.
+
+A destroyed value has no token, so it appears in neither list. There is
+nothing for a reply to return.
+
 ## A model that reformats a token breaks restoring
 
 No delimiter choice fixes this. `!|EMAIL_1|` is rejected exactly as

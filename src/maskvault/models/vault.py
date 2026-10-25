@@ -10,13 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
 import re
-import secrets
 import string
 import threading
 
 from maskvault.constants import SCOPE_LETTERS
 from maskvault.exceptions import VaultError
 from maskvault.models.token_format import TokenFormat
+from maskvault.scopes import GENERATOR
 
 
 @dataclass
@@ -213,21 +213,21 @@ class Vault:
 
     @staticmethod
     def _new_scope(letters: int = SCOPE_LETTERS) -> str:
-        """Generate a marker made only of letters.
+        """Generate a marker that does not repeat within this process.
 
-        Letters rather than hex, because the scope goes into the *label* and
-        the default `label_pattern` is `[A-Z_]+`. A hex marker like `C8A0`
-        contains digits, so a scoped token stopped matching its own vault's
-        pattern — restoring still worked, since that is a dictionary lookup,
-        but `leaked()` could no longer see the token it was meant to report.
-        Which would have removed the one benefit scoping exists for.
+        A process prefix plus a counter, rather than letters drawn one at a
+        time from the CSPRNG. Two markers from this process cannot agree,
+        because the counter never repeats — arithmetic rather than
+        probability — and the remaining risk is two *processes* drawing the
+        same prefix, which is a far smaller population than two vaults
+        drawing the same marker. See `maskvault.scopes`.
         """
         if letters < 1:
             raise VaultError(
                 f"a scope needs at least one letter (got {letters}); "
                 "for an unscoped vault use Vault() instead"
             )
-        return "".join(secrets.choice(string.ascii_uppercase) for _ in range(letters))
+        return GENERATOR.next_marker(letters)
 
     def as_dict(self) -> dict:
         """Convert to plain JSON-serializable data, losing nothing.
@@ -325,17 +325,76 @@ class Vault:
         """How many distinct values were tokenized."""
         return len(self.snapshot())
 
-    def summary(self) -> str:
-        """Describe what happened, with no values in it — safe to log."""
-        kinds: dict[str, int] = {}
-        pattern = self.pattern
-        for token in self.snapshot():
-            match = pattern.match(token)
-            if match:
-                kinds[match.group(1)] = kinds.get(match.group(1), 0) + 1
-        parts = [f"{count} {kind.lower()}" for kind, count in sorted(kinds.items())]
+    def wipe(self) -> int:
+        """Forget every value this vault holds, returning how many went.
+
+        A vault holds the originals in plaintext — that is its whole job —
+        and `restore()` does not empty it, because a multi-turn conversation
+        needs the same tokens to mean the same people on the next turn. So a
+        vault outlives its use unless something ends it, and until then it is
+        confidential data sitting in memory, in a cache, or in a table.
+
+        Call this when the conversation is over and the values are not needed
+        again:
+
+            restored = anonymizer.restore(reply, vault)
+            vault.wipe()
+            store.delete(conversation_id)
+
+        What survives is the scope, the token format and the list of
+        destroyed labels — enough for `summary()` to still describe what
+        happened, with no values in it. What goes is every original and the
+        reverse map, so a later `restore()` resolves nothing rather than
+        resolving wrongly.
+
+        **This is not a secure erase.** Python strings are immutable and the
+        interpreter may hold copies the process cannot reach, so this removes
+        the reference, not every byte. For a stronger guarantee the value
+        must never reach this process — see `docs/limitations.md`.
+        """
         with self._lock:
+            count = len(self.values)
+            self.values.clear()
+            self._reverse.clear()
+            # Counters are deliberately kept. Resetting them would let a
+            # later mint reuse `EMAIL_1` for a different person, so a token
+            # from before the wipe would resolve to the wrong value instead
+            # of to nothing.
+            return count
+
+    @property
+    def wiped(self) -> bool:
+        """Whether this vault has been emptied of values.
+
+        Distinct from never having held any: `summary()` still reports what
+        was replaced, so a wiped vault can be logged without implying the
+        request was clean.
+        """
+        return not self.values and bool(self._counters)
+
+    def summary(self) -> str:
+        """Describe what happened, with no values in it — safe to log.
+
+        Counted from the counters rather than from the stored values, so a
+        wiped vault still reports what it replaced. An audit line written
+        after disposal would otherwise read "nothing replaced" for a request
+        that handled somebody's data, which is the opposite of what an audit
+        line is for.
+        """
+        with self._lock:
+            kinds = {self._kind_of(scoped): count for scoped, count in self._counters.items()}
             destroyed = len(self.destroyed)
+        parts = [f"{count} {kind.lower()}" for kind, count in sorted(kinds.items())]
         if destroyed:
             parts.append(f"{destroyed} destroyed")
         return ", ".join(parts) or "nothing replaced"
+
+    def _kind_of(self, scoped_label: str) -> str:
+        """Strip the scope marker back off a counter key.
+
+        Counters are keyed by `LABEL_SCOPE` so two scopes cannot share a
+        count, but a summary should say "email", not "email_qrmzvbdlkpwa".
+        """
+        if self.scope and scoped_label.endswith(f"_{self.scope}"):
+            return scoped_label[: -len(self.scope) - 1]
+        return scoped_label

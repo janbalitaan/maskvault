@@ -216,3 +216,57 @@ cosmic ray flips a bit in the machine doing the work.
 it is the default — right for a single-process round trip where the vault
 never leaves the function, wrong the moment a vault is stored, queued or
 passed between nodes. Use `for_key` or `scoped` there.
+
+## How long a vault lives, and how to end it early
+
+A vault holds the originals in plaintext — that is its job — so how long it
+lives is how long that data exists. `restore()` does **not** empty it, on
+purpose: a multi-turn conversation needs the same tokens to mean the same
+people on the next turn. So retention is governed by the TTL, and everything
+else is an option on top.
+
+| Lever | Scope | When it acts |
+| --- | --- | --- |
+| `ttl_seconds` | every store | the default, 900s; `0` means never |
+| `store.delete(key)` | one vault | immediately |
+| `store.purge()` | expired entries | when you call it |
+| `store.clear()` | everything in memory | immediately |
+| `vault.wipe()` | the object in hand | immediately |
+
+**The TTL is the real control.** Fifteen minutes by default, because a
+request-and-reply cycle is seconds and a conversation is minutes. Set it to
+your own retention policy, or to `0` to turn this library's expiry off
+entirely and leave retention to the job that already owns it — a nightly
+sweep, a partition drop, a DBA's policy. Zero means *no expiry*, not
+immediate expiry, throughout.
+
+**`purge()` has to be called by something.** A cache expires entries itself,
+so `SerializedVaultStore` over Redis or Memcached needs nothing. A database
+has no native expiry, so `DatabaseVaultStore.purge()` is what reclaims
+expired rows, from a cron, a startup hook or a periodic task. An unswept
+table of vaults is a growing pile of plaintext nobody is using.
+
+**`vault.wipe()` ends the object.** For the single-turn flow where the vault
+is finished the moment the reply is restored:
+
+```python
+restored = anonymizer.restore(reply, vault)
+vault.wipe()                      # the object in hand
+store.delete(conversation_id)     # and the stored copy
+```
+
+Both, because they are separate copies — wiping the object does not reach the
+store, and deleting from the store does not reach the object.
+
+After a wipe the tokens resolve to nothing rather than to something wrong,
+`leaked()` reports them, and `summary()` still describes what the request
+replaced. An audit line written after disposal would otherwise read "nothing
+replaced" for a request that handled somebody's data.
+
+The counters deliberately survive, so a token minted later cannot reuse
+`EMAIL_1` and resolve to a different person.
+
+**It is not a secure erase.** Python strings are immutable and the
+interpreter may hold copies the process cannot reach, so `wipe()` removes the
+reference, not every byte. For a stronger guarantee the value must not reach
+this process at all.

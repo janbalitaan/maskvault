@@ -303,6 +303,43 @@ class Anonymizer:
         found.update(self._mangled(restored, vault))
         return sorted(found)
 
+    def resolved(self, text: str, vault: Vault) -> list[str]:
+        """Which of this vault's tokens appear intact in the text.
+
+        For the question `leaked()` does not answer. Three values go out and
+        a reply comes back mentioning two of them: that is normal — a reply
+        need not repeat everything it was given — so nothing is wrong and
+        `leaked()` is correctly silent.
+
+        But *whether* it is normal is the application's call, not this
+        library's. A summarizer mentioning two of three contacts is fine; a
+        form-filler returning two of three fields is a failure. So the counts
+        are reported rather than judged:
+
+            sent = anonymizer.resolved(reply, vault)
+            if len(sent) < len(vault.values):
+                ...  # some values were not referred to
+
+        Combined with `leaked()` the three outcomes separate cleanly:
+
+            resolved 3, leaked 0   everything came back
+            resolved 2, leaked 0   one was not mentioned — usually fine
+            resolved 2, leaked 1   one was mangled — do not trust the reply
+
+        Tokens for destroyed values are never in the vault, so they cannot
+        appear here. A destroyed value has no token to return.
+        """
+        return sorted(token for token in vault.values if token in text)
+
+    def unresolved(self, text: str, vault: Vault) -> list[str]:
+        """Which of this vault's tokens do not appear intact in the text.
+
+        The complement of `resolved`. Includes both the values a reply simply
+        did not mention and the ones it mangled — `leaked()` is what tells
+        those two apart, and only the second is a reason to distrust a reply.
+        """
+        return sorted(token for token in vault.values if token not in text)
+
     @staticmethod
     def _mangled(text: str, vault: Vault) -> set[str]:
         """Find label-and-index cores from this vault that survived in the text.

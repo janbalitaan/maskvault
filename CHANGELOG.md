@@ -75,6 +75,33 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
+- `Vault.wipe()`, which forgets every value a vault holds and reports how
+  many went. `restore()` deliberately does not empty a vault, because a
+  multi-turn conversation needs the same tokens to mean the same people next
+  turn — so a vault outlives its use unless something ends it, and until
+  then it is plaintext in memory or in a store. Retention is still governed
+  by the TTL; this is the option for ending one early. The counters survive a
+  wipe, so a token minted later cannot reuse an index and resolve to a
+  different person, and `summary()` still describes what was replaced so an
+  audit line written after disposal is not blank.
+- `Anonymizer.resolved()` and `.unresolved()`, for the question `leaked()`
+  does not answer. Three values go out and a reply mentions two: that is
+  ordinary, and whether it is acceptable is the application's call. Together
+  with `leaked()` the three outcomes separate — everything came back, one was
+  not mentioned, one was mangled — and the middle two have the same resolved
+  count, which is why `leaked()` is not optional.
+- `DatabaseVaultStore` serializes every statement by default, so one
+  connection shared across threads is correct rather than merely usual.
+  sqlite3 with sixteen threads on one connection lost about a quarter of its
+  operations unserialized and none serialized. `serialize=False` opts out for
+  a driver that is already thread-safe or a pool that hands out one
+  connection per thread.
+- Scope markers now come from a process prefix and a counter rather than from
+  a per-letter CSPRNG draw. Two markers from one process cannot agree, which
+  is arithmetic rather than probability, and the remaining risk is two
+  processes drawing the same prefix — a far smaller population. Also 12x
+  faster: 9.4 us a marker to 0.8. `ScopeGenerator.capacity()` reports where
+  the counter wraps, which at the default width is 308 million vaults.
 - `Vault.for_key(conversation_id)`, which derives a token marker from an id
   the caller already has unique. A token is an index into one vault, so two
   independent vaults both mint `EMAIL_1` and restoring with the wrong one

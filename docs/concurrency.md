@@ -93,6 +93,63 @@ unpickle, because a lock means nothing across a process boundary.
 For anything that crosses a machine, use `Vault.as_dict()` and JSON rather
 than pickle. A pickled payload is executable on load.
 
+## Stores, and the connection you hand them
+
+A store's thread safety is the store's where it owns the state, and the
+**driver's** where it does not.
+
+| Store | Shared between threads |
+| --- | --- |
+| `MemoryVaultStore` | safe — it holds the dict, so it holds a lock |
+| `SerializedVaultStore` | as safe as the backend you passed |
+| `DatabaseVaultStore` | as safe as the connection you passed |
+
+Neither of the latter two adds a lock, deliberately: a lock around a driver
+that is already thread-safe serializes every request through one mutex for
+nothing, and a lock cannot rescue a driver that is not.
+
+What the store does do is open a cursor per statement and close it in a
+`finally`. That matches the rule the drivers actually state, and means a
+cursor is never shared or left open.
+
+### The drivers
+
+**redis-py** is thread-safe. A `Redis` client holds a connection pool and
+hands a connection to whichever thread asks, so one client is the normal
+thing to share.
+
+**psycopg 3** documents the connection as thread-safe and the *cursor* as
+not: "more than one thread at a time can use the same connection. Different
+threads can use the same connection by creating different cursors." The store
+creates one per statement, so that rule is satisfied.
+
+The hazard that remains is the **transaction**, not the connection. Threads
+sharing a connection share its transaction, so a server error raised by one
+leaves the others' cursors in an error state until something rolls back. If
+your application does its own transactional work on the same connection, give
+the vault store its own — from `psycopg_pool`, or a second connection.
+
+**sqlite3** does not tolerate it. One connection used from several threads
+raises `sqlite3.DatabaseError: not an error` under load, even with
+`check_same_thread=False`. Give each thread its own connection, or serialize
+access yourself.
+
+**Never across a process boundary.** A connection created before a fork is
+broken in the child. Open it after the worker starts — which is the usual
+advice for any driver, not something about this store.
+
+### What this looks like
+
+```python
+# One client, shared. redis-py pools internally.
+store = SerializedVaultStore(RedisBackend(redis.Redis(...)), cipher=cipher)
+
+# A pool, so the vault store never shares your application's transaction.
+pool = psycopg_pool.ConnectionPool(dsn)
+with pool.connection() as connection:
+    DatabaseVaultStore(connection, cipher=cipher).save(key, vault)
+```
+
 ## What is not safe
 
 **Mutating a policy while it is in use.** `Anonymizer` is immutable after

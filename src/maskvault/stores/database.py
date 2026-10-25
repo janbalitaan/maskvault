@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
+from contextlib import AbstractContextManager, nullcontext, suppress
 import json
 import re
+import threading
 import time
 from typing import Any
 
@@ -45,6 +46,21 @@ class DatabaseVaultStore:
     vaults is a growing pile of plaintext, and that is the one failure this
     store can have which a cache cannot.
 
+    **Correct before fast.** Every statement runs under a lock, so one
+    connection shared by any number of threads gives the right answer rather
+    than a driver error or, worse, a value from another caller. sqlite3 with
+    sixteen threads on one connection loses about a quarter of its operations
+    unserialized and none of them serialized. The cost is that concurrency is
+    bounded by the store rather than by the database — which is the trade
+    worth making here, because the alternative is a wrong answer about
+    somebody's confidential data.
+
+    `serialize=False` removes the lock for a driver that is already
+    thread-safe, or a pool that hands out one connection per thread. redis-py
+    and psycopg both qualify; see `docs/concurrency.md` for what each one
+    guarantees, including the shared-transaction hazard that a lock does not
+    fix.
+
     And retention here is usually already somebody's job. A nightly job, a
     partition drop, a policy the DBA owns — so `ttl_seconds=0` turns this
     store's expiry off entirely and leaves it to them. That is what zero
@@ -59,6 +75,7 @@ class DatabaseVaultStore:
         table: str = "maskvault_vaults",
         paramstyle: str = "qmark",
         ttl_seconds: float = VAULT_TTL_SECONDS,
+        serialize: bool = True,
     ) -> None:
         """Wrap a DB-API connection.
 
@@ -85,6 +102,10 @@ class DatabaseVaultStore:
         self._table = table
         self._marker = _PLACEHOLDERS[paramstyle]
         self._expiry = Expiry(ttl_seconds)
+        # A real lock by default, a no-op when the caller opts out. Branching
+        # on a flag at every statement would put the decision in the hot path
+        # and in every reader's way; choosing the object once does not.
+        self._guard: AbstractContextManager = threading.Lock() if serialize else nullcontext()
 
     def create_table(self) -> None:
         """Create the table if it is absent.
@@ -108,20 +129,27 @@ class DatabaseVaultStore:
         expires_at = self._expiry.deadline()
         # Delete-then-insert rather than an upsert, because the upsert syntax
         # differs between dialects and this has to work on all of them.
-        self._execute(f"DELETE FROM {self._table} WHERE vault_key = {self._marker}", (key,))
-        self._execute(
-            f"INSERT INTO {self._table} (vault_key, payload, expires_at) "
-            f"VALUES ({self._marker}, {self._marker}, {self._marker})",
-            (key, payload, expires_at),
-        )
-        self._connection.commit()
+        # One lock across both statements and the commit. Delete-then-insert
+        # is two steps, and a thread that inserted between them would have its
+        # row deleted by this one — losing a vault that was saved
+        # successfully, which the caller would only discover at restore time.
+        with self._guard:
+            self._execute(f"DELETE FROM {self._table} WHERE vault_key = {self._marker}", (key,))
+            self._execute(
+                f"INSERT INTO {self._table} (vault_key, payload, expires_at) "
+                f"VALUES ({self._marker}, {self._marker}, {self._marker})",
+                (key, payload, expires_at),
+            )
+            self._connection.commit()
 
     def load(self, key: str) -> Vault | None:
         """Return the vault under `key`, or None if absent or expired."""
-        row = self._fetch_one(
-            f"SELECT payload, expires_at FROM {self._table} WHERE vault_key = {self._marker}",
-            (key,),
-        )
+        with self._guard:
+            row = self._fetch_one(
+                f"SELECT payload, expires_at FROM {self._table} "
+                f"WHERE vault_key = {self._marker}",
+                (key,),
+            )
         if row is None:
             return None
         payload, expires_at = row[0], float(row[1])
@@ -138,8 +166,9 @@ class DatabaseVaultStore:
 
     def delete(self, key: str) -> None:
         """Forget the vault under `key`, whether or not one is there."""
-        self._execute(f"DELETE FROM {self._table} WHERE vault_key = {self._marker}", (key,))
-        self._connection.commit()
+        with self._guard:
+            self._execute(f"DELETE FROM {self._table} WHERE vault_key = {self._marker}", (key,))
+            self._connection.commit()
 
     def purge(self) -> int:
         """Delete every expired row and return how many went.
@@ -153,11 +182,12 @@ class DatabaseVaultStore:
             # Returning zero rather than deleting on a comparison that would
             # match every row.
             return 0
-        swept = self._affected(
-            f"DELETE FROM {self._table} WHERE expires_at < {self._marker}",
-            (time.time(),),
-        )
-        self._connection.commit()
+        with self._guard:
+            swept = self._affected(
+                f"DELETE FROM {self._table} WHERE expires_at < {self._marker}",
+                (time.time(),),
+            )
+            self._connection.commit()
         return swept
 
     def __contains__(self, key: str) -> bool:

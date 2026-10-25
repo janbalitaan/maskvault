@@ -57,6 +57,8 @@ instance is safe to share across concurrent callers.
 | `.anonymize_into(text, vault)` | `str` | accumulate into an existing vault |
 | `.restore(text, vault)` | `str` | put the originals back |
 | `.leaked(text, vault)` | `list[str]` | tokens still present after restoring |
+| `.resolved(text, vault)` | `list[str]` | this vault's tokens that came back intact |
+| `.unresolved(text, vault)` | `list[str]` | this vault's tokens that did not |
 | `.explain(text)` | `list[Finding]` | what would happen. **Carries values.** |
 | `.preview(text)` | `str` | the same, rendered. **For a terminal, not a log.** |
 | `.suggest_whitelist(text, *, only_reversible=True)` | `dict` | a draft allowlist |
@@ -71,6 +73,9 @@ rather than the caller needing a branch at every call site.
 ```python
 Vault(values={}, destroyed=[], token_format=..., scope="")
 Vault.scoped()          # tokens carry a random marker; see docs/stores.md
+Vault.for_key(id)       # marker derived from an id you already have unique
+vault.wipe()            # forget every value; returns how many went
+vault.wiped             # whether it has been emptied
 ```
 
 | Member | Returns | |
