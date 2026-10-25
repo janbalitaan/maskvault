@@ -1,78 +1,19 @@
 name: publish
 
-# Runs when a GitHub release is published. Tagging alone does not publish, so
-# a mistaken tag can be deleted without having shipped anything.
+# A published release, not a tag. A tag pushed by mistake can be deleted; a
+# release is a deliberate act.
 on:
   release:
     types: [published]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - run: uv python install 3.12
-
-      # Publishing a version that does not pass its own tests is worse than
-      # publishing late, so the full gate runs again here rather than
-      # trusting that CI passed on some earlier commit.
-      - name: Gate
-        run: |
-          uv sync --dev
-          uv run ruff check src tests
-          uv run ruff format --check src tests
-          uv run ty check src
-          uv run pytest -q
-          uv run python scripts/complexity.py src
-
-      - name: Build
-        run: uv build
-
-      - name: Check the distributions
-        run: uvx twine check --strict dist/*
-
-      - name: Confirm the tag matches the packaged version
-        run: |
-          packaged=$(uv run python -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_bytes().decode())['project']['version'])")
-          tag="${GITHUB_REF_NAME#v}"
-          if [ -n "$tag" ] && [ "$tag" != "$packaged" ]; then
-            echo "tag $tag does not match pyproject version $packaged"
-            exit 1
-          fi
-          echo "version $packaged"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: distributions
-          path: dist/
-
   publish:
-    needs: build
-    runs-on: ubuntu-latest
-    # The environment is where PyPI's trusted publisher is scoped, and it is
-    # also where a required reviewer can be configured so a release cannot be
-    # published by a push alone.
-    environment:
-      name: pypi
-      url: https://pypi.org/p/maskvault
+    uses: janbalitaan/pipeline-templates/.github/workflows/python-publish.yml@main
     permissions:
-      # Trusted publishing exchanges this short-lived OIDC token for an
-      # upload token. No API token is stored in the repository, so there is
-      # none to leak or rotate.
+      contents: read
+      # A reusable workflow cannot grant itself more than the caller has, so
+      # the OIDC permission that trusted publishing needs is granted here.
       id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: distributions
-          path: dist/
-
-      - uses: pypa/gh-action-pypi-publish@release/v1
+    with:
+      environment: pypi
