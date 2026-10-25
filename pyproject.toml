@@ -53,6 +53,10 @@ ignore = ["D107", "D203", "D213"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "PLR2004", "ARG", "D"]
+# A public constructor with five independent keyword-only options is clearer
+# than one taking a config object, and the argument count rule does not
+# distinguish the two.
+"src/maskvault/anonymizer.py" = ["PLR0913"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"

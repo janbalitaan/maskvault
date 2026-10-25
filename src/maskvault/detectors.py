@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import re
 
+from maskvault.constants import PHONE_MAX_DIGITS, PHONE_MIN_DIGITS
 from maskvault.entropy import (
     CANDIDATE,
-    MIN_LENGTH,
+    ENTROPY_MIN_LENGTH,
     candidate_pattern,
     looks_like_a_secret,
 )
@@ -27,9 +28,6 @@ from maskvault.models.detector import Detector
 
 # ISO-8601-ish dates are all over a CV and are not phone numbers.
 _ISO_DATE = re.compile(r"^\d{4}-\d{1,2}(-\d{1,2})?$")
-
-PHONE_MIN_DIGITS = 7
-PHONE_MAX_DIGITS = 15  # E.164 maximum
 
 
 def is_phone_shaped(candidate: str) -> bool:
@@ -284,7 +282,7 @@ def entropy_detector(
     pattern = (
         CANDIDATE
         if min_length <= 0 and not include_symbols
-        else candidate_pattern(min_length or MIN_LENGTH, include_symbols)
+        else candidate_pattern(min_length or ENTROPY_MIN_LENGTH, include_symbols)
     )
 
     def validate(candidate: str) -> bool:

@@ -24,14 +24,14 @@ from maskvault.models.detector import Detector
 from maskvault.models.finding import Finding
 from maskvault.models.level import Level
 from maskvault.models.substitution import Substitution
-from maskvault.models.vault import TOKEN_PATTERN, Vault
+from maskvault.models.token_format import (
+    DEFAULT_FORMATS,
+    FORMATS_BY_NAME,
+    TokenFormat,
+    choose_format,
+)
+from maskvault.models.vault import Vault
 from maskvault.models.whitelist import Whitelist
-
-# A shape unlikely to be mangled: no spaces, no markdown meaning, and it
-# survives being quoted or reformatted. The matching TOKEN_PATTERN lives with
-# Vault, which is what needs to read tokens back.
-# Not a credential, despite the name — bandit flags anything called TOKEN.
-TOKEN_TEMPLATE = "[[{label}_{index}]]"  # noqa: S105
 
 
 class Anonymizer:
@@ -51,11 +51,21 @@ class Anonymizer:
     def __init__(
         self,
         level: Level | str = Level.STANDARD,
+        *,
         detectors: tuple[Detector, ...] | None = None,
         terms: dict[str, list[str]] | None = None,
         whitelist: Whitelist | dict | None = None,
+        token_format: TokenFormat | str | None = None,
+        format_candidates: tuple[TokenFormat, ...] | None = None,
         enabled: bool = True,
     ) -> None:
+        """Build an anonymizer.
+
+        Everything after `level` is keyword-only. There is no sensible
+        positional order for four independent options, and a caller who
+        passed `terms` where `detectors` was expected would get silent
+        under-protection rather than an error.
+        """
         # Default-deny within the chosen level: every detector it includes
         # runs unless the whitelist says otherwise. Deny is the safe default,
         # because the value that leaks is the one nobody thought to configure.
@@ -69,31 +79,27 @@ class Anonymizer:
         )
         self._enabled = enabled
         self._terms = self._compile_terms(terms or {})
-
-    @staticmethod
-    def _compile_terms(terms: dict[str, list[str]]) -> list[tuple[str, re.Pattern[str]]]:
-        """Owner-supplied literals, longest first.
-
-        Longest first so "Acme Corporation" is matched before "Acme", which
-        would otherwise leave "Corporation" dangling next to a token.
-        """
-        compiled = []
-        for label, values in terms.items():
-            for value in sorted(
-                {v.strip() for v in values if v.strip()}, key=len, reverse=True
-            ):
-                compiled.append((label.upper(), re.compile(rf"\b{re.escape(value)}\b", re.I)))
-        return compiled
-
-    # ------------------------------------------------------------------
+        # None means choose per operation, which avoids a collision with
+        # whatever markup the text already uses. A named or explicit format
+        # pins it, for a caller who needs the same delimiters every time.
+        self._fixed_format = (
+            FORMATS_BY_NAME[token_format] if isinstance(token_format, str) else token_format
+        )
+        # The candidates auto-selection tries, in preference order. A caller
+        # can supply their own, so "pick one that fits the text" does not
+        # mean "pick one of ours".
+        self._candidates = format_candidates or DEFAULT_FORMATS
+        self._active_format = self._fixed_format or self._candidates[0]
 
     def anonymize(self, text: str) -> tuple[str, Vault]:
         """Return text safe to send, plus the vault needed to restore it."""
-        vault = Vault()
+        token_format = self._fixed_format or choose_format(text, self._candidates)
+        vault = Vault(token_format=token_format)
         if not self._enabled or not text:
             return text, vault
 
         counters: dict[str, int] = {}
+        self._active_format = token_format
         # Caller-supplied terms first: they are the most specific and the most
         # sensitive, and a literal must win over a generic pattern.
         for label, pattern in self._terms:
@@ -114,55 +120,6 @@ class Anonymizer:
                     vault,
                 )
         return text, vault
-
-    def _substitute(
-        self,
-        text: str,
-        rule: Substitution,
-        counters: dict[str, int],
-        vault: Vault,
-    ) -> str:
-        """Replace each distinct match with a stable token.
-
-        The same value gets the same token throughout, so a model can still
-        tell that two mentions refer to one thing.
-        """
-        seen: dict[str, str] = {}
-
-        def swap(match: re.Match[str]) -> str:
-            whole = match.group(0)
-            original = rule.value_of(match)
-            if not original or self._whitelist.allows_value(original):
-                return whole
-            if rule.validator is not None and not rule.validator(original):
-                return whole
-            if original in seen:
-                token = seen[original]
-            else:
-                counters[rule.label] = counters.get(rule.label, 0) + 1
-                token = TOKEN_TEMPLATE.format(label=rule.label, index=counters[rule.label])
-                seen[original] = token
-                vault.values[token] = original
-            # Replace only the value, so a keyword-led match keeps its keyword.
-            return whole.replace(original, token, 1)
-
-        return rule.pattern.sub(swap, text)
-
-    def _destroy(self, text: str, detector: Detector, vault: Vault) -> str:
-        """Remove a value that must never be sent or restored."""
-
-        def swap(match: re.Match[str]) -> str:
-            original = match.group(0)
-            if self._whitelist.allows_value(original):
-                return original
-            if detector.validate is not None and not detector.validate(original):
-                return original
-            vault.destroyed.append(detector.label)
-            return detector.notice
-
-        return detector.pattern.sub(swap, text)
-
-    # ------------------------------------------------------------------
 
     def restore(self, text: str, vault: Vault) -> str:
         """Put the real values back into a model's answer.
@@ -205,27 +162,6 @@ class Anonymizer:
         findings.sort(key=lambda finding: (finding.start, finding.label))
         return findings
 
-    def _find(self, text: str, detector: Detector) -> list[Finding]:
-        """Every match of one detector, as reportable findings."""
-        label = detector.label.upper()
-        found = []
-        for match in detector.pattern.finditer(text):
-            value = detector.value_of(match)
-            if not value or not detector.matches(value):
-                continue
-            start, end = detector.span_of(match)
-            found.append(
-                Finding(
-                    label=label,
-                    value=value,
-                    action=detector.action,
-                    start=start,
-                    end=end,
-                    allowed=self._whitelist.allows_value(value),
-                )
-            )
-        return found
-
     def preview(self, text: str) -> str:
         """Render what would happen. For a terminal, not a log.
 
@@ -265,6 +201,16 @@ class Anonymizer:
         }
 
     @property
+    def token_format(self) -> TokenFormat | None:
+        """The pinned format, or None when one is chosen per operation."""
+        return self._fixed_format
+
+    @property
+    def format_candidates(self) -> tuple[TokenFormat, ...]:
+        """The formats auto-selection will try, in preference order."""
+        return self._candidates
+
+    @property
     def level(self) -> Level:
         """The strictness level in force."""
         return self._level
@@ -290,4 +236,97 @@ class Anonymizer:
         "[[ORG_2]]" to a recruiter.
         """
         restored = self.restore(text, vault)
-        return [match.group(0) for match in TOKEN_PATTERN.finditer(restored)]
+        # The vault's own pattern, so a token written in one format is not
+        # judged against another — and so a wikilink in text that used a
+        # different format is not mistaken for a mangled token.
+        return [match.group(0) for match in vault.pattern.finditer(restored)]
+
+    @staticmethod
+    def _compile_terms(terms: dict[str, list[str]]) -> list[tuple[str, re.Pattern[str]]]:
+        """Owner-supplied literals, longest first.
+
+        Longest first so "Acme Corporation" is matched before "Acme", which
+        would otherwise leave "Corporation" dangling next to a token.
+        """
+        compiled = []
+        for label, values in terms.items():
+            for value in sorted(
+                {v.strip() for v in values if v.strip()}, key=len, reverse=True
+            ):
+                compiled.append((label.upper(), re.compile(rf"\b{re.escape(value)}\b", re.I)))
+        return compiled
+
+    # ------------------------------------------------------------------
+
+    def _substitute(
+        self,
+        text: str,
+        rule: Substitution,
+        counters: dict[str, int],
+        vault: Vault,
+    ) -> str:
+        """Replace each distinct match with a stable token.
+
+        The same value gets the same token throughout, so a model can still
+        tell that two mentions refer to one thing.
+        """
+        seen: dict[str, str] = {}
+
+        def swap(match: re.Match[str]) -> str:
+            whole = match.group(0)
+            original = rule.value_of(match)
+            if not original or self._whitelist.allows_value(original):
+                return whole
+            if rule.validator is not None and not rule.validator(original):
+                return whole
+            if original in seen:
+                token = seen[original]
+            else:
+                counters[rule.label] = counters.get(rule.label, 0) + 1
+                token = self._active_format.render(
+                    self._active_format.label_for(rule.label),
+                    counters[rule.label],
+                )
+                seen[original] = token
+                vault.values[token] = original
+            # Replace only the value, so a keyword-led match keeps its keyword.
+            return whole.replace(original, token, 1)
+
+        return rule.pattern.sub(swap, text)
+
+    def _destroy(self, text: str, detector: Detector, vault: Vault) -> str:
+        """Remove a value that must never be sent or restored."""
+
+        def swap(match: re.Match[str]) -> str:
+            original = match.group(0)
+            if self._whitelist.allows_value(original):
+                return original
+            if detector.validate is not None and not detector.validate(original):
+                return original
+            vault.destroyed.append(detector.label)
+            return detector.notice
+
+        return detector.pattern.sub(swap, text)
+
+    # ------------------------------------------------------------------
+
+    def _find(self, text: str, detector: Detector) -> list[Finding]:
+        """Every match of one detector, as reportable findings."""
+        label = detector.label.upper()
+        found = []
+        for match in detector.pattern.finditer(text):
+            value = detector.value_of(match)
+            if not value or not detector.matches(value):
+                continue
+            start, end = detector.span_of(match)
+            found.append(
+                Finding(
+                    label=label,
+                    value=value,
+                    action=detector.action,
+                    start=start,
+                    end=end,
+                    allowed=self._whitelist.allows_value(value),
+                )
+            )
+        return found

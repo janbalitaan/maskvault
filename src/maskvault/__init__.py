@@ -39,7 +39,8 @@ No dependencies, which is deliberate: a privacy filter nobody can audit is
 not much of a privacy filter.
 """
 
-from maskvault.anonymizer import TOKEN_TEMPLATE, Anonymizer
+from maskvault.anonymizer import Anonymizer
+from maskvault.constants import TOKEN_TEMPLATE
 from maskvault.detectors import (
     DEFAULT_DETECTORS,
     PERSONAL_DATA,
@@ -53,26 +54,29 @@ from maskvault.detectors import (
 from maskvault.entropy import classify, find_secrets, shannon_entropy
 from maskvault.levels import detectors_for
 from maskvault.models import (
-    COMMON_SAFE_VALUES,
-    TECHNICAL_HOMONYMS,
+    DEFAULT_FORMATS,
     TOKEN_PATTERN,
     Action,
     Detector,
     EntropyVerdict,
     Finding,
     Level,
+    TokenFormat,
     Vault,
     Whitelist,
+    choose_format,
 )
-from maskvault.personal import (
+from maskvault.personal import STRUCTURED_PERSONAL, special_category_detectors
+from maskvault.vocabularies import (
+    COMMON_SAFE_VALUES,
     SPECIAL_CATEGORIES,
-    STRUCTURED_PERSONAL,
-    special_category_detectors,
+    TECHNICAL_HOMONYMS,
 )
 
 __all__ = [
     "COMMON_SAFE_VALUES",
     "DEFAULT_DETECTORS",
+    "DEFAULT_FORMATS",
     "PERSONAL_DATA",
     "PHONE_MAX_DIGITS",
     "PHONE_MIN_DIGITS",
@@ -88,10 +92,12 @@ __all__ = [
     "EntropyVerdict",
     "Finding",
     "Level",
+    "TokenFormat",
     "Vault",
     "Whitelist",
     "__version__",
     "all_detectors",
+    "choose_format",
     "classify",
     "detectors_for",
     "entropy_detector",

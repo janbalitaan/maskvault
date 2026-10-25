@@ -10,8 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 
-# Matches the tokens this library emits, for counting them by kind.
-TOKEN_PATTERN = re.compile(r"\[\[([A-Z_]+)_(\d+)\]\]")
+from maskvault.constants import TOKEN_REGEX
+from maskvault.models.token_format import BRACKETS, TokenFormat
+
+# Matches tokens in the default format. A Vault carries its own format, so
+# this is only the fallback for code that has no Vault to hand.
+TOKEN_PATTERN = re.compile(TOKEN_REGEX)
 
 
 @dataclass
@@ -25,6 +29,16 @@ class Vault:
     values: dict[str, str] = field(default_factory=dict)
     destroyed: list[str] = field(default_factory=list)
 
+    # Which placeholder format these tokens are written in. Recorded here
+    # because restoring needs it, and because the format is chosen per
+    # operation to avoid whatever markup the input already contained.
+    token_format: TokenFormat = BRACKETS
+
+    @property
+    def pattern(self) -> re.Pattern[str]:
+        """Matches tokens in this vault's format."""
+        return self.token_format.pattern
+
     @property
     def replaced(self) -> int:
         """How many distinct values were tokenized."""
@@ -33,8 +47,9 @@ class Vault:
     def summary(self) -> str:
         """Describe what happened, with no values in it — safe to log."""
         kinds: dict[str, int] = {}
+        pattern = self.pattern
         for token in self.values:
-            match = TOKEN_PATTERN.match(token)
+            match = pattern.match(token)
             if match:
                 kinds[match.group(1)] = kinds.get(match.group(1), 0) + 1
         parts = [f"{count} {kind.lower()}" for kind, count in sorted(kinds.items())]

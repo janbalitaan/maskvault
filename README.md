@@ -130,6 +130,63 @@ there is `vault.summary()`, which counts by kind and contains no values:
 "1 age, 2 health, 1 salary, 1 street_address, 1 destroyed"
 ```
 
+## The token format is yours
+
+`[[LABEL_1]]` is the default because it reads clearly to a language model, and
+a model that recognizes a placeholder leaves it alone. But double square
+brackets are wikilink syntax in Obsidian, Roam, Logseq and MediaWiki, which
+breaks in two ways: a value already inside a wikilink produces `[[[[ORG_1]]]]`,
+and a legitimate link to a page called `[[API_2]]` has the exact shape of a
+token.
+
+So by default the format is chosen per operation — the first candidate whose
+delimiters are absent from the text — and recorded in the vault, so restoring
+needs no bookkeeping from you:
+
+```python
+safe, vault = anonymizer.anonymize("see [[Notes]], I work at Acme Corp")
+# "see [[Notes]], I work at @@ORG_1@@"
+vault.token_format.name   # "at_signs"
+```
+
+Pin one when you need it stable, by name or outright:
+
+```python
+Anonymizer(token_format="at_signs")
+
+Anonymizer(token_format=TokenFormat(
+    name="mine",
+    opening="<%|",
+    closing="|%>",
+    label_pattern=r"[a-z_]+",
+    label_case="lower",
+))   # -> <%|org_1|%>
+```
+
+Or supply your own candidate list, and auto-selection chooses from yours
+rather than the built-ins:
+
+```python
+Anonymizer(format_candidates=(my_first_choice, my_fallback))
+```
+
+`random_format()` generates unguessable delimiters per call. That removes any
+possibility of collision, and raises the cost of text forging a token that
+`restore()` would expand — unpredictable, which is weaker than secret, but
+useful when the text passes through something that processes untrusted input.
+
+A format is validated at construction: it must match its own output. A format
+that cannot would lose every value at restore time with no error, so it is
+refused immediately instead:
+
+```python
+TokenFormat(name="bad", opening="[[", closing="]]", label_pattern=r"\d+")
+# ValueError: token format 'bad' cannot match its own output ('[[LABEL_1]]')
+```
+
+Formats round-trip through `format_from_dict` / `as_dict`, so one can live in
+a config file.
+
 ## When a token comes back damaged
 
 A model may mangle a token. `leaked()` reports any that survive restoration,

@@ -28,21 +28,16 @@ from __future__ import annotations
 import math
 import re
 
+from maskvault.constants import (
+    BASE64_THRESHOLD,
+    ENTROPY_MIN_LENGTH,
+    HEX_THRESHOLD,
+    MIN_CHARACTER_CLASSES,
+    MIXED_THRESHOLD,
+    PASSWORD_ALPHABET,
+    TOKEN_ALPHABET,
+)
 from maskvault.models.entropy_verdict import EntropyVerdict
-
-# Below this, entropy is too noisy to judge.
-MIN_LENGTH = 20
-
-# Shannon entropy in bits per character. Thresholds differ by alphabet
-# because a smaller alphabet caps the achievable entropy: hex can only reach
-# log2(16) = 4.0, so demanding 4.5 of it would never match.
-HEX_THRESHOLD = 3.0
-BASE64_THRESHOLD = 4.0
-MIXED_THRESHOLD = 3.5
-
-# A secret almost always draws on more than one character class. Prose and
-# snake_case identifiers draw on one.
-MIN_CHARACTER_CLASSES = 2
 
 _HEX = re.compile(r"^[0-9a-fA-F]+$")
 _BASE64ISH = re.compile(r"^[A-Za-z0-9+/_\-]+={0,2}$")
@@ -50,21 +45,10 @@ _BASE64ISH = re.compile(r"^[A-Za-z0-9+/_\-]+={0,2}$")
 
 # Candidate tokens: long unbroken runs that could be a secret. Split on
 # whitespace and the punctuation that surrounds values in real text.
-# The default alphabet covers token-shaped secrets: API keys, hex digests,
-# base64 blobs. It excludes punctuation on purpose, so a run of prose is not
-# read as one long candidate.
-TOKEN_ALPHABET = r"A-Za-z0-9+/=_\-"  # noqa: S105
-
-# A password is a different shape. It is short, it contains punctuation, and
-# with the token alphabet it splits at the first symbol — "k3yMaterial9xQ!zP"
-# becomes two fragments, neither long enough to judge. This alphabet keeps it
-# whole, at the cost of matching more non-secrets, which is why only the
-# relaxed mode uses it.
-PASSWORD_ALPHABET = r"\S"  # noqa: S105
 
 
 def candidate_pattern(
-    min_length: int = MIN_LENGTH, include_symbols: bool = False
+    min_length: int = ENTROPY_MIN_LENGTH, include_symbols: bool = False
 ) -> re.Pattern[str]:
     """Candidate tokens of at least `min_length` characters.
 
@@ -119,7 +103,7 @@ def character_classes(text: str) -> int:
 
 
 def classify(
-    candidate: str, relax_by: float = 0.0, min_length: int = MIN_LENGTH
+    candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
 ) -> EntropyVerdict:
     """Decide whether a single token looks like a secret.
 
@@ -200,7 +184,7 @@ def find_secrets(text: str) -> list[EntropyVerdict]:
 
 
 def looks_like_a_secret(
-    candidate: str, relax_by: float = 0.0, min_length: int = MIN_LENGTH
+    candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
 ) -> bool:
     """Whether a token should be treated as a secret. Used as a Detector validator."""
     return classify(candidate, relax_by=relax_by, min_length=min_length).is_secret

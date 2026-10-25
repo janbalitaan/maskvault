@@ -20,6 +20,7 @@ outright, or a `Whitelist` to let individual things back through.
 
 from __future__ import annotations
 
+from maskvault.constants import PARANOID_MIN_LENGTH, PARANOID_RELAX_BY
 from maskvault.detectors import (
     DEFAULT_DETECTORS,
     PERSONAL_DATA,
@@ -30,12 +31,6 @@ from maskvault.models.action import Action
 from maskvault.models.detector import Detector
 from maskvault.models.level import Level
 from maskvault.personal import STRUCTURED_PERSONAL, special_category_detectors
-
-
-def _credentials_only() -> tuple[Detector, ...]:
-    return VENDOR_CREDENTIALS + tuple(
-        detector for detector in DEFAULT_DETECTORS if detector.action is Action.DESTROY
-    )
 
 
 def detectors_for(level: Level | str = Level.STANDARD) -> tuple[Detector, ...]:
@@ -76,5 +71,17 @@ def detectors_for(level: Level | str = Level.STANDARD) -> tuple[Detector, ...]:
         # A lower bar and a wider alphabet catch more real secrets, including
         # punctuated passwords, and more false positives. That is the trade
         # PARANOID exists to make.
-        + (entropy_detector(min_length=16, relax_by=0.5, include_symbols=True),)
+        + (
+            entropy_detector(
+                min_length=PARANOID_MIN_LENGTH,
+                relax_by=PARANOID_RELAX_BY,
+                include_symbols=True,
+            ),
+        )
+    )
+
+
+def _credentials_only() -> tuple[Detector, ...]:
+    return VENDOR_CREDENTIALS + tuple(
+        detector for detector in DEFAULT_DETECTORS if detector.action is Action.DESTROY
     )

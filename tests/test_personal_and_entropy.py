@@ -11,7 +11,8 @@ import pytest
 
 from maskvault import Anonymizer, Level
 from maskvault.entropy import character_classes, classify, find_secrets, shannon_entropy
-from maskvault.personal import SPECIAL_CATEGORIES, special_category_detectors
+from maskvault.personal import special_category_detectors
+from maskvault.vocabularies import SPECIAL_CATEGORIES
 
 
 @pytest.fixture

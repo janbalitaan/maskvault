@@ -32,9 +32,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 import re
 
-# Stripped from both ends before a comparison, because a detector may hand
-# over "https://example.com/me," with the sentence comma attached.
-_TRAILING_PUNCTUATION = " .,;:!?\"'()[]{}<>"
+from maskvault.constants import TRAILING_PUNCTUATION
 
 # Pulls the host out of an email address or a URL.
 _HOST = re.compile(r"(?:@|https?://)([^\s/:@]+)", re.I)
@@ -90,7 +88,7 @@ class Whitelist:
         candidate = value.strip()
         if not candidate:
             return True
-        trimmed = candidate.strip(_TRAILING_PUNCTUATION)
+        trimmed = candidate.strip(TRAILING_PUNCTUATION)
         lowered, trimmed_lower = candidate.lower(), trimmed.lower()
 
         # Each mechanism as one condition, so adding another does not grow a
@@ -111,22 +109,6 @@ class Whitelist:
                 bool(self.predicate and self.predicate(candidate)),
             )
         )
-
-    def _allows_host(self, candidate: str) -> bool:
-        """Whether the host in an email or URL is an allowed domain.
-
-        Subdomains count: allowing "example.com" allows "docs.example.com",
-        because a developer listing a company domain means the company.
-        """
-        if not self._domains:
-            return False
-        found = _HOST.search(candidate)
-        if not found:
-            return False
-        host = found.group(1).lower().rstrip(".")
-        return any(host == domain or host.endswith(f".{domain}") for domain in self._domains)
-
-    # -- config ------------------------------------------------------------
 
     @classmethod
     def from_dict(cls, data: dict | None) -> Whitelist:
@@ -209,6 +191,22 @@ class Whitelist:
             parts.append("a predicate")
         return ", ".join(parts) or "nothing allowed through"
 
+    def _allows_host(self, candidate: str) -> bool:
+        """Whether the host in an email or URL is an allowed domain.
+
+        Subdomains count: allowing "example.com" allows "docs.example.com",
+        because a developer listing a company domain means the company.
+        """
+        if not self._domains:
+            return False
+        found = _HOST.search(candidate)
+        if not found:
+            return False
+        host = found.group(1).lower().rstrip(".")
+        return any(host == domain or host.endswith(f".{domain}") for domain in self._domains)
+
+    # -- config ------------------------------------------------------------
+
 
 def _lower_set(values: Iterable[str]) -> set[str]:
     return {value.strip().lower() for value in values if value and value.strip()}
@@ -220,107 +218,3 @@ def _word_alternation(words: set[str]) -> re.Pattern[str] | None:
         return None
     ordered = sorted(words, key=len, reverse=True)
     return re.compile("|".join(re.escape(word) for word in ordered), re.I)
-
-
-# Public technology names, which carry no privacy risk and whose replacement
-# would make a prompt about someone's work unanswerable. A starting point
-# rather than a default, because only the caller knows what is public.
-COMMON_SAFE_VALUES: frozenset[str] = frozenset(
-    {
-        "python",
-        "javascript",
-        "typescript",
-        "java",
-        "php",
-        "perl",
-        "go",
-        "rust",
-        "ruby",
-        "kotlin",
-        "swift",
-        "c",
-        "c#",
-        "c++",
-        "sql",
-        "bash",
-        "scala",
-        "elixir",
-        "fastapi",
-        "django",
-        "flask",
-        "react",
-        "next.js",
-        "vue",
-        "svelte",
-        "angular",
-        "node.js",
-        "express",
-        "spring",
-        "laravel",
-        "rails",
-        "android",
-        "flutter",
-        "postgresql",
-        "postgres",
-        "mysql",
-        "mongodb",
-        "redis",
-        "sqlite",
-        "oracle",
-        "elasticsearch",
-        "kafka",
-        "rabbitmq",
-        "influxdb",
-        "clickhouse",
-        "cassandra",
-        "aws",
-        "gcp",
-        "azure",
-        "vercel",
-        "openshift",
-        "kubernetes",
-        "docker",
-        "terraform",
-        "ansible",
-        "jenkins",
-        "github",
-        "gitlab",
-        "git",
-        "grafana",
-        "linux",
-        "ubuntu",
-        "debian",
-        "windows",
-        "macos",
-        "nginx",
-        "apache",
-    }
-)
-
-# Words in the special-category vocabularies that are also ordinary technical
-# vocabulary. Offered so a developer running STRICT over code or documentation
-# does not have to discover each one from a false positive.
-TECHNICAL_HOMONYMS: frozenset[str] = frozenset(
-    {
-        "black",  # the formatter, and a color
-        "white",  # whitelist, and a color
-        "native",  # native code, native app
-        "straight",  # straight-through processing
-        "partner",  # partner API, partner integration
-        "single",  # single sign-on, singleton
-        "default",  # a value, not a loan default
-        "migration",  # a schema migration
-        "transplant",
-        "chronic",
-        "terminal",  # a terminal emulator
-        "bi",  # business intelligence
-        "trans",  # transaction, transform
-        "cis",  # CIS benchmarks
-        "x",  # the variable, and the platform
-        "strike",  # a strike price, a strikethrough
-        "union",  # a SQL UNION, a C union
-        "green party",
-        "block",  # a code block
-        "dl",  # a definition list
-    }
-)
