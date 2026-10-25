@@ -5,6 +5,7 @@ description = "Reversible anonymization with a vault: replace confidential value
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "janbalitaan" }]
 keywords = ["anonymization", "pseudonymization", "pii", "privacy", "redaction",
             "secrets", "gdpr", "masking", "tokenization", "data-protection", "llm"]
