@@ -76,7 +76,7 @@ class TestTheBadgesPointSomewhereUseful:
 
     def test_the_pypi_badge_points_at_the_right_project(self):
         """This one stays PyPI-sourced: showing the published version is the
-        whole job, and "not found" before publication is accurate."""
+        whole job, and it starts working the moment the package is up."""
         assert "img.shields.io/pypi/v/maskvault" in README
         assert "pypi.org/project/maskvault/" in README
 
