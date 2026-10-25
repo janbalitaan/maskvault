@@ -148,6 +148,27 @@ SpecialCategories.category_detector("health", frozenset({"neuropathy"}))
 Terms are lower-cased, because matching is case-insensitive and a capitalized
 entry would look like it worked while matching nothing extra.
 
+### `extra_terms` is not `terms`
+
+Two options take word lists and they do different jobs:
+
+| | |
+| --- | --- |
+| `Anonymizer(terms=...)` | literals **you** name, with **your** label, always on |
+| `extra_terms=...` | adds to a **shipped special-category** vocabulary, which only runs at `STRICT` and above |
+
+```python
+# "Initech" is my client's name. Replace it, label it CLIENT, at every level.
+Anonymizer(terms={"client": ["Initech"]})
+
+# "long covid" is a health condition the shipped list misses. Treat it the
+# way the other hundred health terms are treated — so only at STRICT.
+Levels.detectors_for(Level.STRICT, extra_terms={"health": ["long covid"]})
+```
+
+Reaching for `extra_terms` to hide a company name does nothing at `STANDARD`,
+which is the default. That is the mistake the similar names invite.
+
 ## What is deliberately not adjustable
 
 **The shipped mappings are read-only.** `SPECIAL_CATEGORIES`,
