@@ -70,7 +70,7 @@ class AnonymizeCommand:
         try:
             serialized = json.dumps(
                 {
-                    "values": vault.values,
+                    "values": vault.snapshot(),
                     "destroyed": vault.destroyed,
                     "token_format": {
                         "name": vault.token_format.name,

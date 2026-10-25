@@ -9,11 +9,10 @@ instance, so a second caller could overwrite it between the first caller's
 write and its use. The first caller then minted tokens in the second caller's
 delimiters while its own vault recorded the format it had asked for.
 
-The visible damage was worse than a wrong field. `_counters_from` reads that
-format to resume numbering, so a vault whose keys no longer match it restarts
-from one — and `anonymize_into` mints `@@EMAIL_1@@` a second time, for a
-different value. Two values, one token, and restore picks whichever was
-written last.
+The visible damage was worse than a wrong field. Resuming the numbering reads
+that format, so a vault whose keys no longer matched it restarted from one —
+and `anonymize_into` minted `@@EMAIL_1@@` a second time, for a different
+value. Two values, one token, and restore picked whichever was written last.
 """
 
 from __future__ import annotations

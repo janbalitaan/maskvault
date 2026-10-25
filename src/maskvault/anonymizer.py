@@ -109,12 +109,10 @@ class Anonymizer:
         if not self._enabled or not text:
             return text
 
-        counters = self._counters_from(vault)
-
         # Caller-supplied terms first: they are the most specific and the most
         # sensitive, and a literal must win over a generic pattern.
         for label, pattern in self._terms:
-            text = self._substitute(text, Substitution(label, pattern), counters, vault)
+            text = self._substitute(text, Substitution(label, pattern), vault)
         for detector in self._detectors:
             if detector.action is Action.DESTROY:
                 text = self._destroy(text, detector, vault)
@@ -127,25 +125,9 @@ class Anonymizer:
                         detector.validate,
                         detector.group,
                     ),
-                    counters,
                     vault,
                 )
         return text
-
-    @staticmethod
-    def _counters_from(vault: Vault) -> dict[str, int]:
-        """Return the highest index already used per label in this vault.
-
-        Needed so a second call does not restart numbering and overwrite what
-        the first call recorded.
-        """
-        counters: dict[str, int] = {}
-        for token in vault.values:
-            match = vault.token_format.pattern.fullmatch(token)
-            if match:
-                label, index = match.group(1), int(match.group(2))
-                counters[label] = max(counters.get(label, 0), index)
-        return counters
 
     def restore(self, text: str, vault: Vault) -> str:
         """Put the real values back into a model's answer.
@@ -156,7 +138,7 @@ class Anonymizer:
         """
         if not vault.values or not text:
             return text
-        for token, original in vault.values.items():
+        for token, original in vault.snapshot().items():
             text = text.replace(token, original)
         return text
 
@@ -322,7 +304,6 @@ class Anonymizer:
         self,
         text: str,
         rule: Substitution,
-        counters: dict[str, int],
         vault: Vault,
     ) -> str:
         """Replace each distinct match with a stable token.
@@ -330,11 +311,6 @@ class Anonymizer:
         The same value gets the same token throughout, so a model can still
         tell that two mentions refer to one thing.
         """
-        # Seeded from the vault so a value already tokenized by an earlier
-        # call keeps its token. Without this, one value spread across several
-        # strings would mint a new token each time and whatever reads the
-        # result could no longer tell the mentions refer to one thing.
-        seen: dict[str, str] = {original: token for token, original in vault.values.items()}
 
         def swap(match: re.Match[str]) -> str:
             whole = match.group(0)
@@ -345,16 +321,10 @@ class Anonymizer:
                 return whole
             if rule.validator is not None and not rule.validator(original):
                 return whole
-            if original in seen:
-                token = seen[original]
-            else:
-                counters[rule.label] = counters.get(rule.label, 0) + 1
-                token = vault.token_format.render(
-                    vault.token_format.label_for(rule.label),
-                    counters[rule.label],
-                )
-                seen[original] = token
-                vault.values[token] = original
+            # The vault allocates: it holds the counters and the reverse
+            # mapping, so giving a repeated value its existing token and
+            # minting a new one are one atomic step rather than two.
+            token = vault.mint(rule.label, original)
             # Replace only the value, so a keyword-led match keeps its keyword.
             return whole.replace(original, token, 1)
 
@@ -398,7 +368,7 @@ class Anonymizer:
                 return original
             if detector.validate is not None and not detector.validate(original):
                 return original
-            vault.destroyed.append(detector.label)
+            vault.destroy(detector.label)
             return detector.notice
 
         return detector.pattern.sub(swap, text)
