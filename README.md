@@ -3,6 +3,11 @@
 Reversible anonymization with a vault. Replace confidential values with
 tokens, pass the text through anything, restore the originals afterwards.
 
+[![PyPI](https://img.shields.io/pypi/v/maskvault)](https://pypi.org/project/maskvault/)
+[![Python](https://img.shields.io/pypi/pyversions/maskvault)](https://pypi.org/project/maskvault/)
+[![CI](https://github.com/janbalitaan/maskvault/actions/workflows/ci.yml/badge.svg)](https://github.com/janbalitaan/maskvault/actions/workflows/ci.yml)
+[![License](https://img.shields.io/pypi/l/maskvault)](https://github.com/janbalitaan/maskvault/blob/main/LICENSE)
+
 ```python
 from maskvault import Anonymizer, Level
 

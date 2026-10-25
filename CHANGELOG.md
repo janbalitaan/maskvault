@@ -6,26 +6,16 @@ caller is listed under **Changed** with what to do about it.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-10-26
+
+First release.
+
 ### Added
 
 - `anonymize_data` and `restore_data`, which walk dicts, lists and JSON rather
   than only strings. One vault covers the whole structure.
 - `Anonymizer.anonymize_into`, which accumulates into an existing vault so
   many strings can share one.
-
-### Changed
-
-- The default token format is now `@@LABEL_1@@` rather than `[[LABEL_1]]`.
-  Collision avoidance can only inspect the text it is given, so it cannot know
-  that the output will later be rendered as Markdown or pasted into a wiki —
-  where double square brackets are a link. At-signs are claimed by no common
-  markup. Pass `token_format="brackets"` to keep the old behavior.
-
-## [0.1.0]
-
-First release.
-
-### Added
 
 - Reversible anonymization with a vault. Values are replaced with tokens and
   restored afterwards, so a third party never sees them while your reader
@@ -48,5 +38,13 @@ First release.
 - Configurable token formats, chosen per operation to avoid colliding with
   wikilink or template syntax already in the text, and validated at
   construction so a format that cannot read back its own output is refused.
+  The default is `@@LABEL_1@@`: collision avoidance can only inspect the text
+  it is given, so it cannot know the output will later be rendered as
+  Markdown or pasted into a wiki, where double square brackets are a link.
+  At-signs are claimed by no common markup. `token_format="brackets"` gives
+  the square-bracket form.
 - `random_format()` for unguessable delimiters.
 - No dependencies.
+
+[Unreleased]: https://github.com/janbalitaan/maskvault/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/janbalitaan/maskvault/releases/tag/v0.1.0
