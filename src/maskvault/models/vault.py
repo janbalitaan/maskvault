@@ -8,6 +8,7 @@ returned over an API. It is held for the life of one operation, and
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import re
 import secrets
 import string
@@ -122,20 +123,96 @@ class Vault:
                 self._counters[label] = max(self._counters.get(label, 0), index)
 
     @classmethod
-    def scoped(cls, token_format: TokenFormat | None = None) -> Vault:
-        """Build a vault whose tokens cannot collide with another vault's.
+    def scoped(
+        cls, token_format: TokenFormat | None = None, letters: int = SCOPE_LETTERS
+    ) -> Vault:
+        """Build a vault whose tokens are very unlikely to collide with another's.
 
         For the deployment where anonymizing and restoring happen in
         different processes — two API nodes, a worker queue, a cache. The
-        marker is random per vault, so a token minted here will not be found
-        in a vault built anywhere else, and the mismatch shows up as an
-        unrestored token rather than as another caller's value.
+        marker is random per vault, so a token minted here is not found in a
+        vault built anywhere else, and the mismatch surfaces as an unrestored
+        token that `leaked()` reports rather than as another caller's value.
+
+        **Unlikely, not impossible.** Two vaults can draw the same marker,
+        and a shared marker plus a mix-up is a silent wrong value again — so
+        this is a safety net under correct vault handling, not a substitute
+        for it. The default eight letters give about a 0.02% chance that any
+        two of ten thousand concurrent vaults share a marker; `letters`
+        raises it for a system with far more, at one character per letter.
+
+        What actually guarantees the right value is keeping the vault with
+        the request that produced it. See `docs/stores.md`.
         """
         chosen = token_format or TokenFormat.default()
-        return cls(token_format=chosen, scope=cls._new_scope())
+        return cls(token_format=chosen, scope=cls._new_scope(letters))
+
+    @classmethod
+    def for_key(
+        cls,
+        key: str,
+        token_format: TokenFormat | None = None,
+        letters: int = SCOPE_LETTERS,
+    ) -> Vault:
+        """Build a vault whose marker is derived from an id you already have.
+
+        `Vault.scoped()` draws a random marker, so two vaults can in
+        principle draw the same one. If you already have something unique per
+        conversation — a session id, a conversation id, a request id, the key
+        you store the vault under — derive the marker from it and uniqueness
+        stops being a matter of chance:
+
+            vault = Vault.for_key(conversation_id)
+            store.save(conversation_id, vault)
+
+        Two consequences worth having. The marker is **deterministic**, so
+        the same conversation always produces the same one — a retry, a
+        replay or a second node reach the same answer. And loading the wrong
+        conversation's vault is caught, because its marker is a function of
+        the id you asked for: the tokens will not match and `leaked()` says
+        so.
+
+        Distinct keys give distinct markers unless the digest collides, which
+        at twelve letters is about 1 in 200,000 across a million
+        conversations. Raise `letters` for more.
+        """
+        chosen = token_format or TokenFormat.default()
+        return cls(token_format=chosen, scope=cls._derive_scope(key, letters))
 
     @staticmethod
-    def _new_scope() -> str:
+    def _derive_scope(key: str, letters: int = SCOPE_LETTERS) -> str:
+        """Map a key onto a fixed-width marker of letters only.
+
+        Letters rather than hex for the same reason the random marker uses
+        them: the scope goes into the label, and the default `label_pattern`
+        is `[A-Z_]+`, so a digit would stop a scoped token matching its own
+        vault's pattern and `leaked()` would go blind to it.
+
+        blake2b rather than a plain hash of the string, so the marker does
+        not reveal the key: a session id is often a user identifier, and a
+        marker that leaked it would put it in every token.
+        """
+        if not key:
+            raise VaultError(
+                "a derived scope needs a non-empty key; for a random marker "
+                "use Vault.scoped() instead"
+            )
+        if letters < 1:
+            raise VaultError(
+                f"a scope needs at least one letter (got {letters}); "
+                "for an unscoped vault use Vault() instead"
+            )
+        digest = hashlib.blake2b(key.encode("utf-8"), digest_size=32).digest()
+        number = int.from_bytes(digest, "big")
+        alphabet = string.ascii_uppercase
+        marker = []
+        for _ in range(letters):
+            number, index = divmod(number, len(alphabet))
+            marker.append(alphabet[index])
+        return "".join(marker)
+
+    @staticmethod
+    def _new_scope(letters: int = SCOPE_LETTERS) -> str:
         """Generate a marker made only of letters.
 
         Letters rather than hex, because the scope goes into the *label* and
@@ -145,7 +222,12 @@ class Vault:
         but `leaked()` could no longer see the token it was meant to report.
         Which would have removed the one benefit scoping exists for.
         """
-        return "".join(secrets.choice(string.ascii_uppercase) for _ in range(SCOPE_LETTERS))
+        if letters < 1:
+            raise VaultError(
+                f"a scope needs at least one letter (got {letters}); "
+                "for an unscoped vault use Vault() instead"
+            )
+        return "".join(secrets.choice(string.ascii_uppercase) for _ in range(letters))
 
     def as_dict(self) -> dict:
         """Convert to plain JSON-serializable data, losing nothing.

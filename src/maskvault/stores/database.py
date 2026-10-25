@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 import json
 import re
 import time
@@ -117,11 +118,10 @@ class DatabaseVaultStore:
 
     def load(self, key: str) -> Vault | None:
         """Return the vault under `key`, or None if absent or expired."""
-        cursor = self._execute(
+        row = self._fetch_one(
             f"SELECT payload, expires_at FROM {self._table} WHERE vault_key = {self._marker}",
             (key,),
         )
-        row = cursor.fetchone()
         if row is None:
             return None
         payload, expires_at = row[0], float(row[1])
@@ -153,14 +153,12 @@ class DatabaseVaultStore:
             # Returning zero rather than deleting on a comparison that would
             # match every row.
             return 0
-        cursor = self._execute(
+        swept = self._affected(
             f"DELETE FROM {self._table} WHERE expires_at < {self._marker}",
             (time.time(),),
         )
         self._connection.commit()
-        # rowcount is -1 on drivers that do not report it, which is not an
-        # error — the rows are gone either way.
-        return max(cursor.rowcount, 0)
+        return swept
 
     def __contains__(self, key: str) -> bool:
         """Whether a live vault is stored under `key`."""
@@ -174,13 +172,48 @@ class DatabaseVaultStore:
             f"{self._expiry.describe()}{sweeping}"
         )
 
-    def _execute(self, statement: str, parameters: tuple = ()) -> Any:
-        """Run one statement, turning a driver error into a library one."""
+    def _execute(self, statement: str, parameters: tuple = ()) -> None:
+        """Run one statement that returns no rows."""
+        self._run(statement, parameters)
+
+    def _fetch_one(self, statement: str, parameters: tuple = ()) -> tuple | None:
+        """Run one statement and return its first row, or None."""
+        return self._run(statement, parameters, fetch=True)[0]
+
+    def _affected(self, statement: str, parameters: tuple = ()) -> int:
+        """Run one statement and return how many rows it changed.
+
+        `rowcount` is -1 on drivers that do not report it, which is not an
+        error — the rows are gone either way — so it is clamped at zero.
+        """
+        return max(self._run(statement, parameters, fetch=True)[1], 0)
+
+    def _run(
+        self, statement: str, parameters: tuple = (), fetch: bool = False
+    ) -> tuple[tuple | None, int]:
+        """Run one statement, always closing the cursor.
+
+        The cursor is closed in a `finally` rather than left to the caller.
+        sqlite3 tolerates an abandoned cursor; PostgreSQL and MySQL hold
+        server-side state for one, so a long-running process doing this on
+        every request accumulates them until the server refuses more.
+
+        A driver error becomes a `VaultError`, so an application catches one
+        exception type whichever driver it passed in.
+        """
+        cursor = None
         try:
             cursor = self._connection.cursor()
             cursor.execute(statement, parameters)
-            return cursor
+            row = cursor.fetchone() if fetch else None
+            return row, getattr(cursor, "rowcount", -1)
         except Exception as error:
             raise VaultError(
                 f"the vault store could not reach its database: {error}"
             ) from error
+        finally:
+            if cursor is not None:
+                # A driver whose close() raises must not mask the real error,
+                # and there is nothing useful to do about a failed close.
+                with suppress(Exception):
+                    cursor.close()

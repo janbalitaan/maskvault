@@ -170,3 +170,49 @@ whose values were all absent.
 
 JSON rather than pickle. A pickled payload is executable on load, so a store
 an attacker can write becomes code execution in every process that reads it.
+
+## How you know a token restores to the right value
+
+A token is an index into **one** vault, not a global name. Two independent
+vaults both mint `EMAIL_1`, so restoring with the wrong one returns another
+caller's value — and it returns it *silently*, because the lookup succeeded.
+`leaked()` sees nothing to report. That is the most dangerous failure this
+library can have: not an error, a plausible wrong answer.
+
+Three things prevent it, and only the first is a guarantee.
+
+**Keep the vault with the request that produced it.** This is the actual
+correctness argument. The vault *is* the identity of that conversation; the
+marker below is a safety net under a mistake, not a replacement for pairing
+them correctly.
+
+**Derive the marker from an id you already have unique.**
+
+```python
+vault = Vault.for_key(conversation_id)
+store.save(conversation_id, vault)
+```
+
+Uniqueness is then inherited from your own id space rather than drawn from a
+hat. The marker is deterministic, so a retry or a second node reaches the
+same answer, and loading the wrong conversation's vault is caught because the
+marker is a function of the id you asked for.
+
+**Or take a random marker.** `Vault.scoped()` draws twelve letters. This is
+probabilistic — it is never 100%:
+
+| vaults in flight | 12 letters | 16 | 20 | 24 |
+| --- | --- | --- | --- | --- |
+| 1,000,000 | 5.2e-06 | 1.1e-11 | 2.5e-17 | 5.5e-23 |
+| 5,000,000 | 1.3e-04 | 2.9e-10 | 6.3e-16 | 1.4e-21 |
+
+At five million concurrent vaults, twelve letters give about one chance in
+7,600 that *some* pair shares a marker — and a shared marker only matters if
+those two vaults are also mixed up. `Vault.scoped(letters=20)` costs eight
+more characters per token and puts it at 6e-16, below the rate at which a
+cosmic ray flips a bit in the machine doing the work.
+
+**An unscoped `Vault()` offers none of this.** `anonymize()` returns one, so
+it is the default — right for a single-process round trip where the vault
+never leaves the function, wrong the moment a vault is stored, queued or
+passed between nodes. Use `for_key` or `scoped` there.

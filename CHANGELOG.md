@@ -75,6 +75,20 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
+- `Vault.for_key(conversation_id)`, which derives a token marker from an id
+  the caller already has unique. A token is an index into one vault, so two
+  independent vaults both mint `EMAIL_1` and restoring with the wrong one
+  returns another caller's value silently. Deriving the marker makes
+  uniqueness inherited rather than probabilistic, makes it deterministic
+  across retries and nodes, and makes loading the wrong conversation's vault
+  visible to `leaked()`.
+- `Vault.scoped()` markers widened from four letters to twelve, and the width
+  is now a parameter. Four letters is 456,976 markers: by the birthday bound
+  two of a thousand concurrent vaults shared one about 66% of the time, which
+  the docstring described as impossible.
+- `DatabaseVaultStore` closes every cursor. Seven statements opened one and
+  nothing closed it — survivable on sqlite3, a server-side resource leak on
+  PostgreSQL and MySQL, growing with every request.
 - `docs/extending.md`, `examples/07_extending.py` and
   `examples/08_your_own_cipher.py`.
 - `Anonymizer.anonymize_into`, which accumulates into an existing vault so

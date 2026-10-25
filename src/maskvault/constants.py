@@ -153,7 +153,23 @@ JSON_KEYS = frozenset(
 # accepts only `[A-Z_]`. Four letters gives 456,976 values: enough that two
 # vaults in one deployment will not collide, short enough that the token stays
 # something a model copies back without reformatting it.
-SCOPE_LETTERS = 4
+# Letters in a scoped vault's marker. The marker is what makes a vault mix-up
+# visible, so its collision resistance bounds that safety directly, and the
+# birthday bound governs: with n vaults in flight the chance two share a
+# marker is about 1 - exp(-n^2 / 2 * 26^letters).
+#
+#   letters   1,000 vaults   1,000,000 vaults
+#         4         66%             ~1
+#         8        4e-6            90.9%
+#        12       2e-14          0.0005%
+#        16      1e-22           1.1e-11
+#
+# Twelve is the default: negligible at a million, and thirteen characters per
+# token rather than seventeen. A system larger than that raises `letters`, and
+# one that already has a unique id per conversation should use
+# `Vault.for_key()` instead, where uniqueness is inherited rather than hoped
+# for.
+SCOPE_LETTERS = 12
 
 # How long a stored vault lives by default. A vault holds plaintext originals,
 # so its lifetime is the window in which they are exposed — long enough for a

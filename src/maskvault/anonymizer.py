@@ -402,6 +402,17 @@ class Anonymizer:
         # through and the token inside was destroyed with the rest.
         if token_format.pattern.search(candidate):
             return True
+        # The core without its delimiters. A detector reading already-replaced
+        # text does not always get the whole token: the entropy net's
+        # candidate pattern stops at `!|`, so it sees `EMAIL_QRMZVB_1` on its
+        # own. With a wide random scope that core measures as a secret, and at
+        # twelve letters 11% of tokens were destroyed — the value lost and the
+        # vault left holding a token no longer in the text.
+        #
+        # Fullmatched, not searched, so a real secret that happens to contain
+        # something token-shaped is still judged on its own merits.
+        if token_format.core_pattern.fullmatch(candidate):
+            return True
         # A notice is prose in brackets, and the only prose this library puts
         # into the text. Matching the shape rather than the exact strings
         # keeps a caller's custom notice covered too.

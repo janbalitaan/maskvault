@@ -94,6 +94,21 @@ class TokenFormat:
         return self.render(self.label_for("LABEL"), 1)
 
     @property
+    def core_pattern(self) -> re.Pattern[str]:
+        """The `LABEL_INDEX` part of a token, without the delimiters.
+
+        A detector running over already-substituted text does not always see
+        a whole token. The entropy net's candidate pattern stops at the
+        delimiters, so what reaches it is the bare core — and a core with a
+        wide random scope in it measures as a high-entropy secret, which got
+        the token destroyed and the original lost for good.
+
+        Matched whole rather than searched, so a genuine secret that merely
+        contains something token-shaped is still judged on its own.
+        """
+        return re.compile(f"{self.label_pattern}_{self.index_pattern}")
+
+    @property
     def pattern(self) -> re.Pattern[str]:
         """Matches tokens written in this format."""
         return re.compile(
