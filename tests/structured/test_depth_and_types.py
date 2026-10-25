@@ -34,7 +34,7 @@ class TestTheDepthCap:
         assert safe is not None
 
     def test_restoring_past_the_cap_also_stops(self):
-        data = nest(MAX_STRUCTURE_DEPTH + 10, "@@EMAIL_1@@")
+        data = nest(MAX_STRUCTURE_DEPTH + 10, "!|EMAIL_1|!")
         anonymizer = Anonymizer()
         _, vault = anonymize_data({"x": "me@acme.com"}, anonymizer)
         assert restore_data(data, anonymizer, vault) is not None

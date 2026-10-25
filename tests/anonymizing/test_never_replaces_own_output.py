@@ -2,7 +2,7 @@
 
 Detectors run one after another over progressively replaced text, so a later
 one sees the tokens and notices the earlier ones left behind. At PARANOID — a
-lower entropy bar and symbols in the alphabet — `@@IP_ADDRESS_1@@` measures as
+lower entropy bar and symbols in the alphabet — `!|IP_ADDRESS_1|!` measures as
 a high-entropy value.
 
 The consequence was not cosmetic. A destroyed token loses the original
@@ -17,7 +17,7 @@ import re
 import pytest
 
 from maskvault import Anonymizer, Level, TokenFormats, anonymize_data, restore_data
-from maskvault.formats import AT_SIGNS, MATH_BRACKETS
+from maskvault.formats import MATH_BRACKETS, PIPE_BANG
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
 
@@ -102,22 +102,22 @@ class TestTheGuardItself:
     def test_an_empty_candidate_is_not_own_output(self):
         """A detector with an optional capture group can hand over nothing,
         and the guard is asked before the emptiness check."""
-        assert not Anonymizer()._is_own_output("", AT_SIGNS)
+        assert not Anonymizer()._is_own_output("", PIPE_BANG)
 
     def test_a_token_is_recognized(self):
-        assert Anonymizer()._is_own_output("@@EMAIL_1@@", AT_SIGNS)
+        assert Anonymizer()._is_own_output("!|EMAIL_1|!", PIPE_BANG)
 
     def test_text_containing_a_token_is_recognized(self):
         """The case a fullmatch missed: the candidate is wider than the token."""
-        assert Anonymizer()._is_own_output("user=@@EMAIL_1@@", AT_SIGNS)
+        assert Anonymizer()._is_own_output("user=!|EMAIL_1|!", PIPE_BANG)
 
     def test_ordinary_text_is_not(self):
-        assert not Anonymizer()._is_own_output("write to me@acme.com", AT_SIGNS)
+        assert not Anonymizer()._is_own_output("write to me@acme.com", PIPE_BANG)
 
     def test_the_format_is_passed_in_not_remembered(self):
         """It belongs to the operation, not the object. A token in another
         format is not this operation's output."""
-        assert not Anonymizer()._is_own_output("@@EMAIL_1@@", MATH_BRACKETS)
+        assert not Anonymizer()._is_own_output("!|EMAIL_1|!", MATH_BRACKETS)
         assert Anonymizer()._is_own_output("\u27e6EMAIL_1\u27e7", MATH_BRACKETS)
 
     def test_a_reversible_detector_also_leaves_a_token_alone(self):
@@ -131,20 +131,20 @@ class TestTheGuardItself:
         defense rather than a reason to drop the first, since a caller who
         pins a format loses it.
         """
-        once, _ = Anonymizer(token_format="at_signs").anonymize("write to me@acme.com")
-        assert "@@EMAIL_1@@" in once
+        once, _ = Anonymizer(token_format="pipe_bang").anonymize("write to me@acme.com")
+        assert "!|EMAIL_1|!" in once
 
         greedy = Detector(
             label="anything", pattern=re.compile(r"\S+"), action=Action.REVERSIBLE
         )
-        second = Anonymizer(token_format="at_signs", detectors=(greedy,))
+        second = Anonymizer(token_format="pipe_bang", detectors=(greedy,))
         safe, again = second.anonymize(once)
-        assert "@@EMAIL_1@@" in safe
-        assert "@@EMAIL_1@@" not in again.values.values()
+        assert "!|EMAIL_1|!" in safe
+        assert "!|EMAIL_1|!" not in again.values.values()
 
     def test_choosing_a_format_also_avoids_the_collision(self):
         """The other defense: delimiters already in the text are avoided, so
         a second pass does not see its own tokens as candidates."""
-        once, _ = Anonymizer(token_format="at_signs").anonymize("write to me@acme.com")
+        once, _ = Anonymizer(token_format="pipe_bang").anonymize("write to me@acme.com")
         _, again = Anonymizer().anonymize(once)
         assert again.values == {}

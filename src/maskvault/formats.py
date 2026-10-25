@@ -1,31 +1,49 @@
 """How a placeholder is written.
 
 No delimiter is safe everywhere, which is the whole reason this is
-configurable rather than fixed.
+configurable rather than fixed. Two things can go wrong, and only the first
+is detectable:
 
-`[[LABEL_1]]` reads most clearly to a language model, and that matters — a
-model that recognizes a placeholder leaves it alone. But double square
-brackets are wikilink syntax in Obsidian, Roam, Logseq and MediaWiki, which
-causes three problems:
+**Collision with the input.** The text already contains the delimiter, so a
+replacement nests inside it or a legitimate occurrence is mistaken for a
+token. This one is avoidable: a format is chosen per operation by trying each
+candidate until one finds no occurrence of its opening delimiter in the text,
+and the choice is recorded in the Vault so restoring never has to be told.
 
-**Nesting.** A value already inside a wikilink produces `[[[[ORG_1]]]]`.
-Renderers and models both mishandle that.
+**Collision with the output's destination.** The text is clean, but the
+*result* is pasted into a wiki, rendered as Markdown, or fed to a template
+engine — where the token means something. Selection cannot help, because it
+inspects the input and knows nothing about where the output goes. Only the
+default can protect against this, by being a pair that nothing claims.
 
-**False leak reports.** A legitimate link to a page named `[[API_2]]` has the
-exact shape of a token, so leak detection flags it.
+So the default is the one pair tested against what people actually paste into
+a model and found in none of it:
 
-**Rendering.** Even when the input contains no wikilinks, the *output* may be
-pasted into a wiki, where `[[ORG_1]]` renders as a broken link.
+    !|LABEL_1|!   nothing claims it
 
-That third problem is the one collision avoidance cannot solve, because it
-inspects the input and knows nothing about where the output goes. So the
-default is `@@LABEL_1@@`, which no common markup claims, and brackets are
-available by name for a caller who controls the whole pipeline.
+The alternatives, and what claims each:
 
-On top of that, a format is chosen per operation by trying each candidate
-until one finds no existing occurrence of its opening delimiter in the text.
-The choice is recorded in the Vault, because restoring requires knowing which
-format was used — a caller never has to track it.
+    [|X|]    Haskell and Idris quasi-quotation. Rare, and more legible than
+             the default, so it is available by name.
+    @@X@@    unified diff hunk headers — `@@ -1,5 +1,5 @@`. Common, because
+             pasting a diff into a model is an ordinary thing to do.
+    [[X]]    wikilinks: Obsidian, Roam, Logseq, MediaWiki, Dendron, Foam.
+             Also the most legible to a language model, which is the trade.
+    [!X!]    GitHub alerts (`> [!NOTE]`), and `[![` is a linked image — the
+             badge syntax at the top of most READMEs.
+    {{X}}    templates: Jinja, Handlebars, Mustache, Vue, Angular, Liquid.
+    {|X|}    MediaWiki tables, and LaTeX.
+    <<X>>    AsciiDoc cross-references.
+    %%X%%    Obsidian comments, SQL LIKE patterns, printf.
+    ((X))    Roam block references.
+    (|X|)    Haskell idiom brackets, and the Elixir and OCaml pipe operator.
+    <|X|>    the convention for a model's own special tokens, which is the
+             one pair that must never be used.
+
+A note on what the default does *not* fix: a model that reformats a token
+breaks restoring whatever the delimiters are, and `!|EMAIL_1|` is rejected
+exactly as `@@EMAIL_1@` was. `Anonymizer.leaked()` is what reports that, and
+no choice of delimiter removes the need for it.
 """
 
 from __future__ import annotations
@@ -36,29 +54,24 @@ import string
 from maskvault.exceptions import TokenFormatError
 from maskvault.models.token_format import TokenFormat
 
-# The candidates, in the order they are tried.
-#
-# Order is by what markup already claims the delimiter, not by how it reads.
-# Collision avoidance can only inspect the text it is given; it cannot know
-# that the output will later be rendered as Markdown, pasted into a wiki, or
-# fed to a template engine. So the default has to be safe in those places
-# without being told about them.
-#
-#   [[X]]   wikilinks: Obsidian, Roam, Logseq, MediaWiki, Dendron, Foam
-#   {{X}}   templates: Jinja, Handlebars, Mustache, Vue, Angular, Liquid
-#   <<X>>   AsciiDoc cross-references
-#   %%X%%   Obsidian comments
-#   ((X))   Roam block references
-#   @@X@@   nothing in general prose. Unified diff uses @@ in hunk headers,
-#           which only appear at the start of a line in a diff.
-#
-# Hence at-signs first. Double square brackets read more clearly to a
-# language model, and a caller who wants that can ask for it by name — but it
-# is the wrong thing to hand someone who has not thought about where their
-# output goes.
+# The candidates, in the order they are tried. Order is by what markup claims
+# the delimiter, not by how it reads — the module docstring lists each.
 
-# Safe in Markdown, wiki markup, HTML and the common template languages.
-AT_SIGNS = TokenFormat.default()
+# The default. Tested against diffs, Markdown, wikilinks, README badges,
+# GitHub alerts, Jinja, Handlebars, Mustache, ERB, Velocity, HTML, YAML, SQL,
+# shell, Makefiles, regex, LaTeX, CI logs, PowerShell, Haskell, Nim, OCaml,
+# Perl, MATLAB, Rust attributes and the `<|...|>` special-token convention,
+# and found in none of them.
+PIPE_BANG = TokenFormat.default()
+
+# More legible than the default and claimed only by Haskell and Idris
+# quasi-quotation, which is rare enough that this sits second rather than
+# being hidden behind a name.
+PIPE_BRACKETS = TokenFormat(name="pipe_brackets", opening="[|", closing="|]")
+
+# The previous default. Unified diff uses `@@` in hunk headers, and pasting a
+# diff into a model is an ordinary thing to do.
+AT_SIGNS = TokenFormat(name="at_signs", opening="@@", closing="@@")
 
 # Mathematical white square brackets. Essentially never typed by hand, so
 # this collides with nothing at all; the cost is that it is non-ASCII, which
@@ -73,7 +86,14 @@ BRACKETS = TokenFormat(name="brackets", opening="[[", closing="]]")
 # references, so it is not a good default either.
 ANGLES = TokenFormat(name="angles", opening="<<", closing=">>")
 
-DEFAULT_FORMATS: tuple[TokenFormat, ...] = (AT_SIGNS, MATH_BRACKETS, BRACKETS, ANGLES)
+DEFAULT_FORMATS: tuple[TokenFormat, ...] = (
+    PIPE_BANG,
+    PIPE_BRACKETS,
+    AT_SIGNS,
+    MATH_BRACKETS,
+    BRACKETS,
+    ANGLES,
+)
 
 FORMATS_BY_NAME: dict[str, TokenFormat] = {
     token_format.name: token_format for token_format in DEFAULT_FORMATS

@@ -9,8 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import re
+import secrets
+import string
 import threading
 
+from maskvault.constants import SCOPE_LETTERS
 from maskvault.models.token_format import TokenFormat
 
 
@@ -48,6 +51,22 @@ class Vault:
     # operation to avoid whatever markup the input already contained.
     token_format: TokenFormat = field(default_factory=TokenFormat.default)
 
+    # An optional per-vault marker woven into every label, for the deployment
+    # where anonymizing and restoring happen in different processes.
+    #
+    # Without it, two vaults independently mint the identical string
+    # `@@EMAIL_1@@` for different values. If the wrong vault is used to
+    # restore — a long-lived vault on another node, a cached one from an
+    # earlier request — the token resolves to someone else's value, silently,
+    # and `leaked()` sees nothing wrong because the token *is* in that vault.
+    #
+    # With it the tokens cannot collide, so a foreign token stays visible and
+    # `leaked()` reports it. Off by default because it makes tokens longer,
+    # and a longer token is one a model is more likely to reformat — trading
+    # a silent wrong answer for a louder one is worth it only when the risk
+    # is real. `Vault.scoped()` builds one.
+    scope: str = ""
+
     def mint(self, label: str, original: str) -> str:
         """Return the token standing for `original`, allocating one if needed.
 
@@ -66,9 +85,10 @@ class Vault:
             existing = self._reverse.get(original)
             if existing is not None:
                 return existing
-            self._counters[label] = self._counters.get(label, 0) + 1
+            scoped = f"{label}_{self.scope}" if self.scope else label
+            self._counters[scoped] = self._counters.get(scoped, 0) + 1
             token = self.token_format.render(
-                self.token_format.label_for(label), self._counters[label]
+                self.token_format.label_for(scoped), self._counters[scoped]
             )
             self.values[token] = original
             self._reverse[original] = token
@@ -93,6 +113,55 @@ class Vault:
             if match:
                 label, index = match.group(1), int(match.group(2))
                 self._counters[label] = max(self._counters.get(label, 0), index)
+
+    @classmethod
+    def scoped(cls, token_format: TokenFormat | None = None) -> Vault:
+        """Build a vault whose tokens cannot collide with another vault's.
+
+        For the deployment where anonymizing and restoring happen in
+        different processes — two API nodes, a worker queue, a cache. The
+        marker is random per vault, so a token minted here will not be found
+        in a vault built anywhere else, and the mismatch shows up as an
+        unrestored token rather than as another caller's value.
+        """
+        chosen = token_format or TokenFormat.default()
+        return cls(token_format=chosen, scope=cls._new_scope())
+
+    @staticmethod
+    def _new_scope() -> str:
+        """Generate a marker made only of letters.
+
+        Letters rather than hex, because the scope goes into the *label* and
+        the default `label_pattern` is `[A-Z_]+`. A hex marker like `C8A0`
+        contains digits, so a scoped token stopped matching its own vault's
+        pattern — restoring still worked, since that is a dictionary lookup,
+        but `leaked()` could no longer see the token it was meant to report.
+        Which would have removed the one benefit scoping exists for.
+        """
+        return "".join(secrets.choice(string.ascii_uppercase) for _ in range(SCOPE_LETTERS))
+
+    def __getstate__(self) -> dict:
+        """Drop the lock so a vault can be pickled.
+
+        A lock cannot be pickled, and adding one made every vault
+        unpicklable — which broke `ProcessPoolExecutor`, multiprocessing, and
+        any cache or task queue that serializes with pickle. Those are exactly
+        the places a vault travels for a multi-process deployment, so the
+        guard has to not cost that.
+        """
+        state = self.__dict__.copy()
+        del state["_lock"]
+        return state
+
+    def __setstate__(self, state: dict) -> None:
+        """Restore a vault and give it a fresh lock.
+
+        A new lock rather than the original: a lock means nothing across a
+        process boundary, and the unpickled vault is a separate object with
+        its own callers.
+        """
+        self.__dict__.update(state)
+        self.__dict__["_lock"] = threading.Lock()
 
     def destroy(self, label: str) -> None:
         """Note that a value under `label` was removed and will not come back."""

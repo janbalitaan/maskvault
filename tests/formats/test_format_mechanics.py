@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level
-from maskvault.formats import AT_SIGNS, DEFAULT_FORMATS
+from maskvault.formats import DEFAULT_FORMATS, PIPE_BANG
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ class TestFormatMechanics:
 
     def test_a_vault_carries_its_format(self, anonymizer):
         _, vault = anonymizer.anonymize("see [[Notes]] at Acme Corp")
-        assert vault.token_format is AT_SIGNS
+        assert vault.token_format is PIPE_BANG
 
     def test_the_summary_still_counts_by_kind(self, anonymizer):
         """Counting reads tokens back, so it has to use the vault's format."""

@@ -106,12 +106,18 @@ class TokenFormat:
     def default(cls) -> TokenFormat:
         """Build the format used when a caller has not chosen one.
 
-        At-signs, because no common markup claims them. Defined here rather
-        than imported from `maskvault.formats` so that a model never depends
-        on a module above it — `Vault` needs a default, and reaching upward
-        for one would make the import graph circular.
+        `!|LABEL_1|!`, which is the one delimiter pair tested against the
+        things people actually paste into a model that claims none of them:
+        diffs, Markdown, wikilinks, README badges, GitHub alerts, Jinja,
+        Handlebars, HTML, YAML, SQL, shell, Haskell quasi-quotes, Rust
+        attributes, and the `<|...|>` convention for a model's own special
+        tokens. The reasoning for each is in `maskvault.formats`.
+
+        Defined here rather than imported from `maskvault.formats` so that a
+        model never depends on a module above it — `Vault` needs a default,
+        and reaching upward for one would make the import graph circular.
         """
-        return cls(name="at_signs", opening="@@", closing="@@")
+        return cls(name="pipe_bang", opening="!|", closing="|!")
 
     def label_for(self, label: str) -> str:
         """Apply this format's casing to a detector label."""

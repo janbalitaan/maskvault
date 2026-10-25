@@ -37,7 +37,7 @@ class TestPreciseBeforeLoose:
         An IP is also a punctuated digit run, so `phone` takes it."""
         anonymizer = Anonymizer(whitelist={"labels": ["ip_address"]})
         safe, _ = anonymizer.anonymize("request from 10.42.7.19")
-        assert "@@PHONE_1@@" in safe
+        assert "!|PHONE_1|!" in safe
 
     def test_whitelisting_the_value_keeps_it_whatever_matches(self):
         """Which is why `values` exists: it allows the text through rather

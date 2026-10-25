@@ -45,7 +45,7 @@ class TestDatesAreNotPhoneNumbers:
     def test_a_log_line_keeps_its_timestamp(self):
         """The failure this guards: an anchored date check only rejected a
         date standing alone, so a timestamp inside a line was matched as a
-        ten-digit run and the line came back as `@@PHONE_1@@:02:11`."""
+        ten-digit run and the line came back as `!|PHONE_1|!:02:11`."""
         line = "2026-10-25 14:02:11 INFO  request from 10.42.7.19"
         safe, _ = Anonymizer().anonymize(line)
         assert safe.startswith("2026-10-25 14:02:11 INFO")

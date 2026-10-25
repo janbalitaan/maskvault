@@ -14,7 +14,7 @@ from maskvault import Anonymizer, Level
 anonymizer = Anonymizer(level=Level.STRICT, terms={"ORG": ["Acme Corp"]})
 
 safe, vault = anonymizer.anonymize("I work at Acme Corp, email me@acme.com")
-# safe -> "I work at @@ORG_1@@, email @@EMAIL_1@@"
+# safe -> "I work at !|ORG_1|!, email !|EMAIL_1|!"
 
 result = send_somewhere(safe)          # a model, a log, a vendor, a dataset
 final = anonymizer.restore(result, vault)   # the real values come back
@@ -53,7 +53,7 @@ upstream and quietly putting it back would hide the mistake.
 
 ```python
 safe, vault = anonymizer.anonymize("key sk-abc123… and I work at Acme Corp")
-# "key [an API key was removed before sending] and I work at @@ORG_1@@"
+# "key [an API key was removed before sending] and I work at !|ORG_1|!"
 vault.destroyed   # ["api_key"]
 ```
 
@@ -137,40 +137,48 @@ there is `vault.summary()`, which counts by kind and contains no values:
 
 ## The token format is yours
 
-The default is `@@LABEL_1@@`, chosen for one reason: no common markup claims
-it. Double square brackets read more clearly to a language model, but they
-are wikilink syntax in Obsidian, Roam, Logseq and MediaWiki, which breaks in
-three ways.
+The default is `!|LABEL_1|!`. Two collisions can break a token and only one
+is detectable.
 
-Two of them are about the input: a value already inside a wikilink produces
-`[[[[ORG_1]]]]`, and a legitimate link to a page called `[[API_2]]` has the
-exact shape of a token, so leak detection flags it.
+**With the input.** The text already contains the delimiter, so a replacement
+nests inside it or a real occurrence is mistaken for a token. This one is
+handled automatically: the format is chosen per operation by trying each
+candidate until one is absent from the text, and the choice is recorded in
+the vault so restoring needs no bookkeeping from you.
 
-The third is the one that matters most and cannot be detected at all. Even
-when the input contains no wikilinks, the **output** may be pasted into a
-wiki, where `[[ORG_1]]` renders as a broken link. This library sees the text
-it is given; it knows nothing about where the result goes. So the default has
-to be safe without being told.
+```python
+safe, vault = anonymizer.anonymize("a note mentioning !|EXISTING|!")
+vault.token_format.name   # "pipe_brackets", since the default was taken
+```
 
-What the common delimiters are already claimed by:
+**With wherever the output goes.** The input is clean, but the *result* is
+pasted into a wiki, rendered as Markdown, or fed to a template engine — where
+the token means something. Selection cannot help, because it sees the text it
+is given and knows nothing about the destination. Only the default can
+protect against this, by being a pair nothing claims.
+
+So the default was picked by testing each candidate against what people
+actually paste into a model:
 
 | | claimed by |
 | --- | --- |
+| `!|X|!` | **nothing** — the default |
+| `[\|X\|]` | Haskell and Idris quasi-quotation. Rare, more legible, so it is second |
+| `@@X@@` | unified diff hunk headers, `@@ -1,5 +1,5 @@` |
 | `[[X]]` | wikilinks — Obsidian, Roam, Logseq, MediaWiki, Dendron, Foam |
+| `[!X!]` | GitHub alerts, `> [!NOTE]`. And `[![` is a linked image — the badge syntax at the top of most READMEs |
 | `{{X}}` | templates — Jinja, Handlebars, Mustache, Vue, Angular, Liquid |
+| `{\|X\|}` | MediaWiki tables, and LaTeX |
 | `<<X>>` | AsciiDoc cross-references |
-| `%%X%%` | Obsidian comments |
+| `%%X%%` | Obsidian comments, SQL `LIKE`, `printf` |
 | `((X))` | Roam block references |
-| `@@X@@` | nothing in prose — unified diff uses `@@` only in hunk headers |
+| `(\|X\|)` | Haskell idiom brackets, the Elixir and OCaml pipe operator |
+| `<\|X\|>` | a model's own special tokens — the one pair to never use |
 
-On top of that, the format is chosen per operation — the first candidate whose
-delimiters are absent from the text — and recorded in the vault, so restoring
-needs no bookkeeping from you:
-
-```python
-safe, vault = anonymizer.anonymize("a note mentioning @@EXISTING@@")
-vault.token_format.name   # "math_brackets", since at-signs were taken
-```
+What the default does **not** fix: a model that reformats a token breaks
+restoring whatever the delimiters are, and `!|EMAIL_1|` is rejected exactly as
+`@@EMAIL_1@` was. [`leaked()`](#detecting-a-mangled-token) is what reports
+that, and no choice of delimiter removes the need for it.
 
 Ask for brackets by name when you control the whole pipeline and want the
 most model-legible form:
@@ -182,7 +190,7 @@ Anonymizer(token_format="brackets")   # -> [[ORG_1]]
 Pin one when you need it stable, by name or outright:
 
 ```python
-Anonymizer(token_format="at_signs")
+Anonymizer(token_format="pipe_bang")
 
 Anonymizer(token_format=TokenFormat(
     name="mine",
@@ -332,7 +340,7 @@ survives:
 from maskvault import anonymize_data, restore_data
 
 safe, vault = anonymize_data({"user": {"email": "me@acme.com"}}, anonymizer)
-# {"user": {"email": "@@EMAIL_1@@"}}
+# {"user": {"email": "!|EMAIL_1|!"}}
 
 restore_data(safe, anonymizer, vault)   # the original, exactly
 ```

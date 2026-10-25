@@ -116,11 +116,11 @@ class TestRestoreCommand:
 
     def test_an_unrestorable_token_is_reported(self, tmp_path, capsys):
         """A model that reformatted a token leaves one behind, and the reader
-        would otherwise see @@EMAIL_1@@ with no explanation."""
+        would otherwise see !|EMAIL_1|! with no explanation."""
         vault = tmp_path / "vault.json"
-        vault.write_text(json.dumps({"values": {"@@EMAIL_1@@": "me@acme.com"}}))
+        vault.write_text(json.dumps({"values": {"!|EMAIL_1|!": "me@acme.com"}}))
         masked = tmp_path / "masked.txt"
-        masked.write_text("write to @@EMAIL_1@@ and @@EMAIL_9@@\n")
+        masked.write_text("write to !|EMAIL_1|! and !|EMAIL_9|!\n")
         main(["restore", str(masked), "--vault", str(vault)])
         captured = capsys.readouterr()
         assert "me@acme.com" in captured.out

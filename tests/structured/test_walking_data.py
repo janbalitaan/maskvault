@@ -103,7 +103,7 @@ class TestWalkingData:
 
     def test_the_format_avoids_markup_already_in_the_data(self, anonymizer):
         """Collision avoidance samples the whole structure, not one string."""
-        data = {"note": "see @@EXISTING@@", "email": "me@acme.com"}
+        data = {"note": "see !|EXISTING|!", "email": "me@acme.com"}
         safe, vault = anonymize_data(data, anonymizer)
-        assert vault.token_format.name != "at_signs"
-        assert safe["note"] == "see @@EXISTING@@"
+        assert vault.token_format.name != "pipe_bang"
+        assert safe["note"] == "see !|EXISTING|!"

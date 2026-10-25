@@ -11,7 +11,7 @@ delimiters while its own vault recorded the format it had asked for.
 
 The visible damage was worse than a wrong field. Resuming the numbering reads
 that format, so a vault whose keys no longer matched it restarted from one —
-and `anonymize_into` minted `@@EMAIL_1@@` a second time, for a different
+and `anonymize_into` minted `!|EMAIL_1|!` a second time, for a different
 value. Two values, one token, and restore picked whichever was written last.
 """
 

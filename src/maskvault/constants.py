@@ -150,3 +150,10 @@ JSON_KEYS = frozenset(
         "patterns",
     }
 )
+
+# How many letters go into a scoped vault's marker. Letters rather than hex
+# digits, because the scope is part of the label and the default label pattern
+# accepts only `[A-Z_]`. Four letters gives 456,976 values: enough that two
+# vaults in one deployment will not collide, short enough that the token stays
+# something a model copies back without reformatting it.
+SCOPE_LETTERS = 4

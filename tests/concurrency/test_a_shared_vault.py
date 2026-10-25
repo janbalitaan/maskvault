@@ -114,19 +114,19 @@ class TestResumingFromExistingEntries:
     def test_a_vault_built_from_stored_values_resumes_too(self):
         """Loaded from a store or a file, which is how a vault survives a
         process boundary."""
-        anonymizer = Anonymizer(token_format="at_signs")
-        vault = Vault(values={"@@EMAIL_1@@": "first@acme.com"})
+        anonymizer = Anonymizer(token_format="pipe_bang")
+        vault = Vault(values={"!|EMAIL_1|!": "first@acme.com"})
         anonymizer.anonymize_into("write to second@acme.com", vault)
         stored = vault.snapshot()
         assert len(stored) == 2
-        assert "@@EMAIL_1@@" in stored
-        assert stored["@@EMAIL_1@@"] == "first@acme.com"
+        assert "!|EMAIL_1|!" in stored
+        assert stored["!|EMAIL_1|!"] == "first@acme.com"
 
     def test_a_value_already_in_a_loaded_vault_keeps_its_token(self):
-        anonymizer = Anonymizer(token_format="at_signs")
-        vault = Vault(values={"@@EMAIL_1@@": "first@acme.com"})
+        anonymizer = Anonymizer(token_format="pipe_bang")
+        vault = Vault(values={"!|EMAIL_1|!": "first@acme.com"})
         safe = anonymizer.anonymize_into("write to first@acme.com", vault)
-        assert "@@EMAIL_1@@" in safe
+        assert "!|EMAIL_1|!" in safe
         assert len(vault.snapshot()) == 1
 
 
