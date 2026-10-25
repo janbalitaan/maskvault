@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import re
 
 from maskvault.constants import TOKEN_REGEX
-from maskvault.models.token_format import BRACKETS, TokenFormat
+from maskvault.models.token_format import AT_SIGNS, TokenFormat
 
 # Matches tokens in the default format. A Vault carries its own format, so
 # this is only the fallback for code that has no Vault to hand.
@@ -32,7 +32,7 @@ class Vault:
     # Which placeholder format these tokens are written in. Recorded here
     # because restoring needs it, and because the format is chosen per
     # operation to avoid whatever markup the input already contained.
-    token_format: TokenFormat = BRACKETS
+    token_format: TokenFormat = AT_SIGNS
 
     @property
     def pattern(self) -> re.Pattern[str]:

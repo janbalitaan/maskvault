@@ -9,7 +9,7 @@ from maskvault import Anonymizer, Level
 anonymizer = Anonymizer(level=Level.STRICT, terms={"ORG": ["Acme Corp"]})
 
 safe, vault = anonymizer.anonymize("I work at Acme Corp, email me@acme.com")
-# safe -> "I work at [[ORG_1]], email [[EMAIL_1]]"
+# safe -> "I work at @@ORG_1@@, email @@EMAIL_1@@"
 
 result = send_somewhere(safe)          # a model, a log, a vendor, a dataset
 final = anonymizer.restore(result, vault)   # the real values come back
@@ -48,7 +48,7 @@ upstream and quietly putting it back would hide the mistake.
 
 ```python
 safe, vault = anonymizer.anonymize("key sk-abc123… and I work at Acme Corp")
-# "key [an API key was removed before sending] and I work at [[ORG_1]]"
+# "key [an API key was removed before sending] and I work at @@ORG_1@@"
 vault.destroyed   # ["api_key"]
 ```
 
@@ -132,21 +132,46 @@ there is `vault.summary()`, which counts by kind and contains no values:
 
 ## The token format is yours
 
-`[[LABEL_1]]` is the default because it reads clearly to a language model, and
-a model that recognizes a placeholder leaves it alone. But double square
-brackets are wikilink syntax in Obsidian, Roam, Logseq and MediaWiki, which
-breaks in two ways: a value already inside a wikilink produces `[[[[ORG_1]]]]`,
-and a legitimate link to a page called `[[API_2]]` has the exact shape of a
-token.
+The default is `@@LABEL_1@@`, chosen for one reason: no common markup claims
+it. Double square brackets read more clearly to a language model, but they
+are wikilink syntax in Obsidian, Roam, Logseq and MediaWiki, which breaks in
+three ways.
 
-So by default the format is chosen per operation — the first candidate whose
+Two of them are about the input: a value already inside a wikilink produces
+`[[[[ORG_1]]]]`, and a legitimate link to a page called `[[API_2]]` has the
+exact shape of a token, so leak detection flags it.
+
+The third is the one that matters most and cannot be detected at all. Even
+when the input contains no wikilinks, the **output** may be pasted into a
+wiki, where `[[ORG_1]]` renders as a broken link. This library sees the text
+it is given; it knows nothing about where the result goes. So the default has
+to be safe without being told.
+
+What the common delimiters are already claimed by:
+
+| | claimed by |
+| --- | --- |
+| `[[X]]` | wikilinks — Obsidian, Roam, Logseq, MediaWiki, Dendron, Foam |
+| `{{X}}` | templates — Jinja, Handlebars, Mustache, Vue, Angular, Liquid |
+| `<<X>>` | AsciiDoc cross-references |
+| `%%X%%` | Obsidian comments |
+| `((X))` | Roam block references |
+| `@@X@@` | nothing in prose — unified diff uses `@@` only in hunk headers |
+
+On top of that, the format is chosen per operation — the first candidate whose
 delimiters are absent from the text — and recorded in the vault, so restoring
 needs no bookkeeping from you:
 
 ```python
-safe, vault = anonymizer.anonymize("see [[Notes]], I work at Acme Corp")
-# "see [[Notes]], I work at @@ORG_1@@"
-vault.token_format.name   # "at_signs"
+safe, vault = anonymizer.anonymize("a note mentioning @@EXISTING@@")
+vault.token_format.name   # "math_brackets", since at-signs were taken
+```
+
+Ask for brackets by name when you control the whole pipeline and want the
+most model-legible form:
+
+```python
+Anonymizer(token_format="brackets")   # -> [[ORG_1]]
 ```
 
 Pin one when you need it stable, by name or outright:
@@ -292,6 +317,28 @@ It is not encrypted, not persisted, and not shared between processes. Restore
 has to happen where anonymization happened, or you have to pass the vault
 yourself — and if you pass it over a network you have moved the problem rather
 than solved it.
+
+### Structured data
+
+Dicts, lists and JSON are walked rather than flattened, so the structure
+survives:
+
+```python
+from maskvault import anonymize_data, restore_data
+
+safe, vault = anonymize_data({"user": {"email": "me@acme.com"}}, anonymizer)
+# {"user": {"email": "@@EMAIL_1@@"}}
+
+restore_data(safe, anonymizer, vault)   # the original, exactly
+```
+
+One vault covers the whole structure, so a value appearing in two places gets
+one token. Keys are left alone by default, because a key is schema rather than
+data and replacing it would make the output unparseable — pass
+`include_keys=True` when a key is itself sensitive. Numbers are left alone for
+the same reason, with `stringify_numbers=True` to opt in. `skip_keys` passes
+named fields through untouched, for an id or timestamp something downstream
+matches on.
 
 ### No format preservation
 

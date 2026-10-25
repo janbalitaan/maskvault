@@ -67,6 +67,7 @@ from maskvault.models import (
     choose_format,
 )
 from maskvault.personal import STRUCTURED_PERSONAL, special_category_detectors
+from maskvault.structured import anonymize_data, restore_data
 from maskvault.vocabularies import (
     COMMON_SAFE_VALUES,
     SPECIAL_CATEGORIES,
@@ -97,12 +98,14 @@ __all__ = [
     "Whitelist",
     "__version__",
     "all_detectors",
+    "anonymize_data",
     "choose_format",
     "classify",
     "detectors_for",
     "entropy_detector",
     "find_secrets",
     "is_phone_shaped",
+    "restore_data",
     "shannon_entropy",
     "special_category_detectors",
 ]

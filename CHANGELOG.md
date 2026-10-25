@@ -6,6 +6,21 @@ caller is listed under **Changed** with what to do about it.
 
 ## [Unreleased]
 
+### Added
+
+- `anonymize_data` and `restore_data`, which walk dicts, lists and JSON rather
+  than only strings. One vault covers the whole structure.
+- `Anonymizer.anonymize_into`, which accumulates into an existing vault so
+  many strings can share one.
+
+### Changed
+
+- The default token format is now `@@LABEL_1@@` rather than `[[LABEL_1]]`.
+  Collision avoidance can only inspect the text it is given, so it cannot know
+  that the output will later be rendered as Markdown or pasted into a wiki —
+  where double square brackets are a link. At-signs are claimed by no common
+  markup. Pass `token_format="brackets"` to keep the old behavior.
+
 ## [0.1.0]
 
 First release.

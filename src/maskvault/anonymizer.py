@@ -95,11 +95,22 @@ class Anonymizer:
         """Return text safe to send, plus the vault needed to restore it."""
         token_format = self._fixed_format or choose_format(text, self._candidates)
         vault = Vault(token_format=token_format)
-        if not self._enabled or not text:
-            return text, vault
+        return self.anonymize_into(text, vault), vault
 
-        counters: dict[str, int] = {}
-        self._active_format = token_format
+    def anonymize_into(self, text: str, vault: Vault) -> str:
+        """Replace values in one string, accumulating into an existing vault.
+
+        This is what lets a caller anonymize many strings under one vault — a
+        structure walked field by field, or a conversation turn by turn. A
+        value appearing in two of them keeps one token, so whatever reads the
+        result can still tell the mentions refer to the same thing.
+        """
+        if not self._enabled or not text:
+            return text
+
+        self._active_format = vault.token_format
+        counters = self._counters_from(vault)
+
         # Caller-supplied terms first: they are the most specific and the most
         # sensitive, and a literal must win over a generic pattern.
         for label, pattern in self._terms:
@@ -119,7 +130,22 @@ class Anonymizer:
                     counters,
                     vault,
                 )
-        return text, vault
+        return text
+
+    @staticmethod
+    def _counters_from(vault: Vault) -> dict[str, int]:
+        """Return the highest index already used per label in this vault.
+
+        Needed so a second call does not restart numbering and overwrite what
+        the first call recorded.
+        """
+        counters: dict[str, int] = {}
+        for token in vault.values:
+            match = vault.token_format.pattern.fullmatch(token)
+            if match:
+                label, index = match.group(1), int(match.group(2))
+                counters[label] = max(counters.get(label, 0), index)
+        return counters
 
     def restore(self, text: str, vault: Vault) -> str:
         """Put the real values back into a model's answer.
@@ -270,7 +296,11 @@ class Anonymizer:
         The same value gets the same token throughout, so a model can still
         tell that two mentions refer to one thing.
         """
-        seen: dict[str, str] = {}
+        # Seeded from the vault so a value already tokenized by an earlier
+        # call keeps its token. Without this, one value spread across several
+        # strings would mint a new token each time and whatever reads the
+        # result could no longer tell the mentions refer to one thing.
+        seen: dict[str, str] = {original: token for token, original in vault.values.items()}
 
         def swap(match: re.Match[str]) -> str:
             whole = match.group(0)

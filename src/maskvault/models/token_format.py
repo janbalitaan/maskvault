@@ -3,10 +3,10 @@
 No delimiter is safe everywhere, which is the whole reason this is
 configurable rather than fixed.
 
-`[[LABEL_1]]` reads clearly to a language model, and that matters — a model
-that understands a placeholder is a placeholder leaves it alone. But double
-square brackets are wikilink syntax in Obsidian, Roam, Logseq and MediaWiki,
-which causes two distinct problems:
+`[[LABEL_1]]` reads most clearly to a language model, and that matters — a
+model that recognizes a placeholder leaves it alone. But double square
+brackets are wikilink syntax in Obsidian, Roam, Logseq and MediaWiki, which
+causes three problems:
 
 **Nesting.** A value already inside a wikilink produces `[[[[ORG_1]]]]`.
 Renderers and models both mishandle that.
@@ -14,10 +14,18 @@ Renderers and models both mishandle that.
 **False leak reports.** A legitimate link to a page named `[[API_2]]` has the
 exact shape of a token, so leak detection flags it.
 
-So a format is chosen per operation, by trying each candidate until one finds
-no existing occurrence of its opening delimiter in the text. The choice is
-recorded in the Vault, because restoring requires knowing which format was
-used — a caller never has to track it.
+**Rendering.** Even when the input contains no wikilinks, the *output* may be
+pasted into a wiki, where `[[ORG_1]]` renders as a broken link.
+
+That third problem is the one collision avoidance cannot solve, because it
+inspects the input and knows nothing about where the output goes. So the
+default is `@@LABEL_1@@`, which no common markup claims, and brackets are
+available by name for a caller who controls the whole pipeline.
+
+On top of that, a format is chosen per operation by trying each candidate
+until one finds no existing occurrence of its opening delimiter in the text.
+The choice is recorded in the Vault, because restoring requires knowing which
+format was used — a caller never has to track it.
 """
 
 from __future__ import annotations
@@ -145,23 +153,42 @@ class TokenFormat:
 
 # The candidates, in the order they are tried.
 #
-# Brackets come first because they are the most legible to a language model,
-# which is the common case and the one where comprehension matters most. Each
-# fallback trades a little of that legibility for a delimiter that is
-# meaningless in one more markup language.
-BRACKETS = TokenFormat(name="brackets", opening="[[", closing="]]")
+# Order is by what markup already claims the delimiter, not by how it reads.
+# Collision avoidance can only inspect the text it is given; it cannot know
+# that the output will later be rendered as Markdown, pasted into a wiki, or
+# fed to a template engine. So the default has to be safe in those places
+# without being told about them.
+#
+#   [[X]]   wikilinks: Obsidian, Roam, Logseq, MediaWiki, Dendron, Foam
+#   {{X}}   templates: Jinja, Handlebars, Mustache, Vue, Angular, Liquid
+#   <<X>>   AsciiDoc cross-references
+#   %%X%%   Obsidian comments
+#   ((X))   Roam block references
+#   @@X@@   nothing in general prose. Unified diff uses @@ in hunk headers,
+#           which only appear at the start of a line in a diff.
+#
+# Hence at-signs first. Double square brackets read more clearly to a
+# language model, and a caller who wants that can ask for it by name — but it
+# is the wrong thing to hand someone who has not thought about where their
+# output goes.
 
 # Safe in Markdown, wiki markup, HTML and the common template languages.
 AT_SIGNS = TokenFormat(name="at_signs", opening="@@", closing="@@")
 
-# For text that already contains both of the above.
+# Mathematical white square brackets. Essentially never typed by hand, so
+# this collides with nothing at all; the cost is that it is non-ASCII, which
+# some pipelines still mishandle.
+MATH_BRACKETS = TokenFormat(name="math_brackets", opening="\u27e6", closing="\u27e7")
+
+# The most legible to a language model, and claimed by every wiki. Available
+# by name for callers who control the whole pipeline.
+BRACKETS = TokenFormat(name="brackets", opening="[[", closing="]]")
+
+# A last resort, after the three above. AsciiDoc uses this for cross
+# references, so it is not a good default either.
 ANGLES = TokenFormat(name="angles", opening="<<", closing=">>")
 
-# Mathematical white square brackets. Essentially never written by hand, so
-# this is the last resort that will not collide with anything.
-MATH_BRACKETS = TokenFormat(name="math_brackets", opening="⟦", closing="⟧")
-
-DEFAULT_FORMATS: tuple[TokenFormat, ...] = (BRACKETS, AT_SIGNS, ANGLES, MATH_BRACKETS)
+DEFAULT_FORMATS: tuple[TokenFormat, ...] = (AT_SIGNS, MATH_BRACKETS, BRACKETS, ANGLES)
 
 FORMATS_BY_NAME: dict[str, TokenFormat] = {
     token_format.name: token_format for token_format in DEFAULT_FORMATS
