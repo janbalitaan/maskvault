@@ -69,6 +69,9 @@ ignore = ["D107", "D203", "D213"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S", "PLR2004", "ARG", "D"]
+# Examples are illustrative scripts, with the same exemptions as the tests
+# and for the same reason: they demonstrate rather than implement.
+"examples/*" = ["S", "D", "T201", "INP001"]
 # S608 flags SQL built by interpolation, and it is right that this file does
 # it: a table name and a parameter marker cannot be bound parameters, so both
 # are interpolated. Both are also validated first — the table against

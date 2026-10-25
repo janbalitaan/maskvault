@@ -25,6 +25,10 @@ class DictBackend:
         return self.data.get(key)
 
     def set(self, key: str, value: bytes, ttl_seconds: float) -> None:
+        # A real backend honours the expiry. This one is a dict, so the
+        # argument is accepted and ignored — the protocol requires it
+        # because an entry that never expires is an exposure with no end.
+        del ttl_seconds
         self.data[key] = value
 
     def delete(self, key: str) -> None:
