@@ -12,7 +12,7 @@ from maskvault import (
     # control
     Whitelist, COMMON_SAFE_VALUES, TECHNICAL_HOMONYMS,
     # inspection
-    Finding, Action, Detector, EntropyVerdict,
+    Finding, Action, Detector, EntropyVerdict, EntropyThresholds,
     # detection internals, for composing your own
     Registry, Levels, Entropy, EntropyDetector, PhoneShape, SpecialCategories,
     DEFAULT_DETECTORS, PERSONAL_DATA, STRUCTURED_PERSONAL, VENDOR_CREDENTIALS,
@@ -157,13 +157,47 @@ A `group` larger than the pattern has is refused at construction.
 ## Detection internals
 
 ```python
-Registry.all_detectors(include_entropy=True) -> tuple[Detector, ...]
-Levels.detectors_for(level) -> tuple[Detector, ...]
-EntropyDetector.build(min_length=0, relax_by=0.0, include_symbols=False)
-SpecialCategories.special_category_detectors(categories=None)
+Registry.all_detectors(
+    include_entropy=True, *, replace=None, without=None, add=None, add_first=None
+) -> tuple[Detector, ...]
+
+Levels.detectors_for(
+    level, *, replace=None, without=None, add=None, add_first=None,
+    extra_terms=None
+) -> tuple[Detector, ...]
+
+EntropyDetector.build(
+    min_length=0, relax_by=0.0, include_symbols=False, thresholds=None
+) -> Detector
+
+SpecialCategories.special_category_detectors(categories=None, extra=None)
+SpecialCategories.vocabularies(extra=None) -> dict[str, frozenset[str]]
 SpecialCategories.category_detector(category, terms)
-PhoneShape.looks_like_a_phone_number(candidate) -> bool
+
+PhoneShape.looks_like_a_phone_number(candidate, minimum=7, maximum=15) -> bool
+PhoneShape.bounded(minimum, maximum) -> Callable[[str], bool]
 ```
+
+`replace`, `without`, `add` and `add_first` adjust a shipped set by label, so a pattern
+that is wrong for one codebase does not wait for a release. A label that is
+not in the set raises rather than doing nothing — see
+[extending](extending.md).
+
+## `EntropyThresholds`
+
+```python
+EntropyThresholds(hex=3.0, base64=4.0, mixed=3.5, minimum_classes=2)
+EntropyThresholds.relaxed_by(0.5)
+```
+
+| Member | |
+| --- | --- |
+| `.for_alphabet(name)` | the bar for "hex", "base64" or anything else |
+| `.describe()` | safe to log |
+
+One bar per alphabet because the maximum differs: hex tops out at 4 bits per
+character, base64 at 6. A single number would be too strict for one or too
+loose for the other.
 
 ```python
 Entropy.classify(candidate, relax_by=0.0, min_length=20) -> EntropyVerdict

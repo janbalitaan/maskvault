@@ -24,6 +24,7 @@ The provider never sees the address. Your reader still gets a correct answer.
 | [Levels](levels.md) | The four strictness levels and what each adds. |
 | [Detection](detection.md) | What is found, how, and what each match costs you. |
 | [Whitelisting](whitelisting.md) | Nine mechanisms for taking back control. |
+| [Extending](extending.md) | Replacing a pattern or a word list without waiting for a release. |
 | [Token formats](token-formats.md) | Delimiters, collisions, and why the default is what it is. |
 | [Structured data](structured-data.md) | Dicts, lists and JSON rather than one string. |
 | [Stores](stores.md) | Moving a vault between requests, processes and nodes. |

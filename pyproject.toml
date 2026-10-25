@@ -72,6 +72,11 @@ ignore = ["D107", "D203", "D213"]
 # Examples are illustrative scripts, with the same exemptions as the tests
 # and for the same reason: they demonstrate rather than implement.
 "examples/*" = ["S", "D", "T201", "INP001"]
+# Six keyword-only adjustments, each one an independent thing a caller may
+# want to change about a shipped detector set. An options object would hide
+# them behind a second type to learn, and the argument-count rule cannot
+# tell a wide keyword surface from a long positional one.
+"src/maskvault/levels.py" = ["PLR0913"]
 # S608 flags SQL built by interpolation, and it is right that this file does
 # it: a table name and a parameter marker cannot be bound parameters, so both
 # are interpolated. Both are also validated first — the table against

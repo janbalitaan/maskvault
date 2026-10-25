@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+
+from maskvault.detectors.adjustments import Adjustments
 from maskvault.detectors.entropy import EntropyDetector
 from maskvault.detectors.general import DEFAULT_DETECTORS
 from maskvault.detectors.identifiers import PERSONAL_DATA
@@ -24,8 +27,20 @@ class Registry:
     """
 
     @staticmethod
-    def all_detectors(include_entropy: bool = True) -> tuple[Detector, ...]:
-        """Return every detector, ordered so specific formats win."""
+    def all_detectors(
+        include_entropy: bool = True,
+        *,
+        replace: Mapping[str, Detector] | None = None,
+        without: Iterable[str] | None = None,
+        add: Iterable[Detector] | None = None,
+        add_first: Iterable[Detector] | None = None,
+    ) -> tuple[Detector, ...]:
+        """Return every detector, ordered so specific formats win.
+
+        `replace`, `without` and `add` adjust the set by label, so a pattern
+        that is wrong for one codebase does not have to wait for a release.
+        See `maskvault.detectors.adjustments`.
+        """
         detectors = (
             VENDOR_CREDENTIALS
             + DEFAULT_DETECTORS[:_DESTRUCTIVE_GENERAL]
@@ -34,4 +49,6 @@ class Registry:
         )
         if include_entropy:
             detectors = (*detectors, EntropyDetector.build())
-        return detectors
+        return Adjustments.apply(
+            detectors, replace=replace, without=without, add=add, add_first=add_first
+        )

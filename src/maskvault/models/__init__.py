@@ -8,6 +8,7 @@ way: models know nothing about detection, detection depends on models.
 
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
+from maskvault.models.entropy_thresholds import EntropyThresholds
 from maskvault.models.entropy_verdict import EntropyVerdict
 from maskvault.models.finding import Finding
 from maskvault.models.level import Level
@@ -19,6 +20,7 @@ from maskvault.models.whitelist import Whitelist
 __all__ = [
     "Action",
     "Detector",
+    "EntropyThresholds",
     "EntropyVerdict",
     "Finding",
     "Level",

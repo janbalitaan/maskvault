@@ -28,14 +28,11 @@ from __future__ import annotations
 import re
 
 from maskvault.constants import (
-    BASE64_THRESHOLD,
     ENTROPY_MIN_LENGTH,
-    HEX_THRESHOLD,
-    MIN_CHARACTER_CLASSES,
-    MIXED_THRESHOLD,
     PASSWORD_ALPHABET,
     TOKEN_ALPHABET,
 )
+from maskvault.models.entropy_thresholds import EntropyThresholds
 from maskvault.models.entropy_verdict import EntropyVerdict
 from maskvault.utils.text import TextMetrics
 
@@ -84,12 +81,26 @@ class Entropy:
 
     @staticmethod
     def classify(
-        candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
+        candidate: str,
+        relax_by: float = 0.0,
+        min_length: int = ENTROPY_MIN_LENGTH,
+        thresholds: EntropyThresholds | None = None,
     ) -> EntropyVerdict:
         """Decide whether a single token looks like a secret.
 
-        `relax_by` lowers each threshold, trading false positives for coverage.
+        `relax_by` lowers each bar together, trading false positives for
+        coverage. `thresholds` sets them individually, for tuning against one
+        codebase's actual traffic — see `EntropyThresholds`. Passing both
+        applies `relax_by` on top of the given bars.
         """
+        bars = thresholds or EntropyThresholds()
+        if relax_by:
+            bars = EntropyThresholds(
+                hex=max(bars.hex - relax_by, 0.0),
+                base64=max(bars.base64 - relax_by, 0.0),
+                mixed=max(bars.mixed - relax_by, 0.0),
+                minimum_classes=bars.minimum_classes,
+            )
         classes = TextMetrics.character_classes(candidate)
         entropy = TextMetrics.shannon_entropy(candidate)
         min_length = max(min_length, 8)
@@ -119,11 +130,12 @@ class Entropy:
                 )
 
         if _HEX.match(candidate):
-            alphabet, threshold = "hex", HEX_THRESHOLD - relax_by
+            alphabet = "hex"
         elif _BASE64ISH.match(candidate):
-            alphabet, threshold = "base64", BASE64_THRESHOLD - relax_by
+            alphabet = "base64"
         else:
-            alphabet, threshold = "mixed", MIXED_THRESHOLD - relax_by
+            alphabet = "mixed"
+        threshold = bars.for_alphabet(alphabet)
 
         if entropy < threshold:
             return EntropyVerdict(
@@ -136,7 +148,7 @@ class Entropy:
             )
 
         # Hex is single-class by definition, so the diversity rule cannot apply.
-        if alphabet != "hex" and classes < MIN_CHARACTER_CLASSES:
+        if alphabet != "hex" and classes < bars.minimum_classes:
             return EntropyVerdict(
                 candidate,
                 entropy,
@@ -172,10 +184,18 @@ class Entropy:
 
     @staticmethod
     def looks_like_a_secret(
-        candidate: str, relax_by: float = 0.0, min_length: int = ENTROPY_MIN_LENGTH
+        candidate: str,
+        relax_by: float = 0.0,
+        min_length: int = ENTROPY_MIN_LENGTH,
+        thresholds: EntropyThresholds | None = None,
     ) -> bool:
         """Whether a token should be treated as a secret. Used as a Detector validator."""
-        return Entropy.classify(candidate, relax_by=relax_by, min_length=min_length).is_secret
+        return Entropy.classify(
+            candidate,
+            relax_by=relax_by,
+            min_length=min_length,
+            thresholds=thresholds,
+        ).is_secret
 
     # The measurement functions moved to utils.text when the domain logic and the
     # arithmetic were separated. Kept as names here because they are public API.

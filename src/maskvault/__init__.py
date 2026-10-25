@@ -64,6 +64,7 @@ from maskvault.levels import Levels
 from maskvault.models import (
     Action,
     Detector,
+    EntropyThresholds,
     EntropyVerdict,
     Finding,
     Level,
@@ -101,6 +102,7 @@ __all__ = [
     "Detector",
     "Entropy",
     "EntropyDetector",
+    "EntropyThresholds",
     "EntropyVerdict",
     "Finding",
     "Level",

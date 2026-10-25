@@ -15,6 +15,7 @@ python examples/01_round_trip.py
 | [`04_structured_data.py`](04_structured_data.py) | A request body rather than a sentence. |
 | [`05_a_multi_turn_chat.py`](05_a_multi_turn_chat.py) | One vault across turns, so one person keeps one token. |
 | [`06_a_store.py`](06_a_store.py) | Restoring on a different node, with encryption. |
+| [`07_extending.py`](07_extending.py) | Replacing a pattern, bound or word list without waiting for a release. |
 
 Only the last one needs anything installed:
 

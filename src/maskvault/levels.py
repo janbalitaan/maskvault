@@ -20,7 +20,10 @@ outright, or a `Whitelist` to let individual things back through.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+
 from maskvault.constants import PARANOID_MIN_LENGTH, PARANOID_RELAX_BY
+from maskvault.detectors.adjustments import Adjustments
 from maskvault.detectors.entropy import EntropyDetector
 from maskvault.detectors.general import DEFAULT_DETECTORS
 from maskvault.detectors.identifiers import PERSONAL_DATA
@@ -39,15 +42,38 @@ class Levels:
     """
 
     @staticmethod
-    def detectors_for(level: Level | str = Level.STANDARD) -> tuple[Detector, ...]:
+    def detectors_for(
+        level: Level | str = Level.STANDARD,
+        *,
+        replace: Mapping[str, Detector] | None = None,
+        without: Iterable[str] | None = None,
+        add: Iterable[Detector] | None = None,
+        add_first: Iterable[Detector] | None = None,
+        extra_terms: Mapping[str, Iterable[str]] | None = None,
+    ) -> tuple[Detector, ...]:
         """Build the detector set for a strictness level.
 
         Order matters throughout: specific formats before generic ones, and the
         entropy net last, so a known format is labeled rather than destroyed as
         an anonymous high-entropy blob.
+
+        `replace`, `without` and `add` adjust the set by label, and
+        `extra_terms` adds to the special-category vocabularies — so a
+        pattern or a word list that is wrong for one codebase does not have
+        to wait for a release. See `maskvault.detectors.adjustments`.
         """
         level = Level(level) if isinstance(level, str) else level
+        chosen = Levels._for_level(level, extra_terms)
+        return Adjustments.apply(
+            chosen, replace=replace, without=without, add=add, add_first=add_first
+        )
 
+    @staticmethod
+    def _for_level(
+        level: Level,
+        extra_terms: Mapping[str, Iterable[str]] | None = None,
+    ) -> tuple[Detector, ...]:
+        """Return the shipped set for a level, before caller adjustments."""
         if level is Level.MINIMAL:
             return (*Levels._credentials_only(), EntropyDetector.build())
 
@@ -80,12 +106,12 @@ class Levels:
         if level is Level.STRICT:
             return (
                 standard
-                + SpecialCategories.special_category_detectors()
+                + SpecialCategories.special_category_detectors(extra=extra_terms)
                 + (EntropyDetector.build(),)
             )
         return (
             standard
-            + SpecialCategories.special_category_detectors()
+            + SpecialCategories.special_category_detectors(extra=extra_terms)
             # A lower bar and a wider alphabet catch more real secrets, including
             # punctuated passwords, and more false positives. That is the trade
             # PARANOID exists to make.

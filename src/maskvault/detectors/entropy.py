@@ -5,6 +5,7 @@ from __future__ import annotations
 from maskvault.entropy import CANDIDATE, ENTROPY_MIN_LENGTH, Entropy
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
+from maskvault.models.entropy_thresholds import EntropyThresholds
 
 
 class EntropyDetector:
@@ -21,12 +22,18 @@ class EntropyDetector:
         min_length: int = 0,
         relax_by: float = 0.0,
         include_symbols: bool = False,
+        thresholds: EntropyThresholds | None = None,
     ) -> Detector:
         """Return a detector tuned by how eagerly it should fire.
 
-        `relax_by` lowers every entropy threshold and `min_length` shortens
-        the candidate. Both catch more real secrets at the cost of more false
+        `relax_by` lowers every bar together and `min_length` shortens the
+        candidate. Both catch more real secrets at the cost of more false
         positives, which is the trade the PARANOID level exists to make.
+
+        `thresholds` sets the bars individually, for a codebase whose traffic
+        the defaults suit badly — a repository full of hex digests, or one
+        where every identifier looks generated. Tuning that should not need a
+        release.
         """
         pattern = (
             CANDIDATE
@@ -36,7 +43,10 @@ class EntropyDetector:
 
         def validate(candidate: str) -> bool:
             return Entropy.looks_like_a_secret(
-                candidate, relax_by=relax_by, min_length=min_length
+                candidate,
+                relax_by=relax_by,
+                min_length=min_length,
+                thresholds=thresholds,
             )
 
         return Detector(
