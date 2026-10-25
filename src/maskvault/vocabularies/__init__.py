@@ -17,6 +17,9 @@ A vocabulary is not detection. It misses what nobody listed and matches words
 used innocently. It is a floor, not a guarantee.
 """
 
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from maskvault.vocabularies.criminal import CRIMINAL_TERMS
 from maskvault.vocabularies.health import HEALTH_TERMS
 from maskvault.vocabularies.homonyms import TECHNICAL_HOMONYMS
@@ -28,14 +31,25 @@ from maskvault.vocabularies.safe_values import COMMON_SAFE_VALUES
 
 # The categories, keyed by the label their tokens carry. Adding a language
 # means adding a file and one line here.
-SPECIAL_CATEGORIES: dict[str, frozenset[str]] = {
-    "health": HEALTH_TERMS,
-    "religion": RELIGION_TERMS,
-    "politics": POLITICS_TERMS,
-    "identity": IDENTITY_TERMS,
-    "origin": ORIGIN_TERMS,
-    "criminal": CRIMINAL_TERMS,
-}
+# Read-only. A plain dict here meant a caller — or a library deeper in the
+# stack — could assign to it and silently disable a category for every user in
+# the process. In a library whose job is to not miss things, detection turning
+# itself off is the worst available failure.
+#
+# Extending is still supported, and is the first thing people want: a domain
+# vocabulary, or a language these lists do not cover. See
+# `SpecialCategories.special_category_detectors(extra=...)`, which merges
+# without touching this.
+SPECIAL_CATEGORIES: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "health": HEALTH_TERMS,
+        "religion": RELIGION_TERMS,
+        "politics": POLITICS_TERMS,
+        "identity": IDENTITY_TERMS,
+        "origin": ORIGIN_TERMS,
+        "criminal": CRIMINAL_TERMS,
+    }
+)
 
 __all__ = [
     "COMMON_SAFE_VALUES",

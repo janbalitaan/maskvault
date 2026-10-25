@@ -48,8 +48,10 @@ no choice of delimiter removes the need for it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import secrets
 import string
+from types import MappingProxyType
 
 from maskvault.exceptions import TokenFormatError
 from maskvault.models.token_format import TokenFormat
@@ -95,9 +97,11 @@ DEFAULT_FORMATS: tuple[TokenFormat, ...] = (
     ANGLES,
 )
 
-FORMATS_BY_NAME: dict[str, TokenFormat] = {
-    token_format.name: token_format for token_format in DEFAULT_FORMATS
-}
+# Read-only: a caller registering a format into this would change what every
+# `token_format="name"` in the process resolves to.
+FORMATS_BY_NAME: Mapping[str, TokenFormat] = MappingProxyType(
+    {token_format.name: token_format for token_format in DEFAULT_FORMATS}
+)
 
 
 class TokenFormats:

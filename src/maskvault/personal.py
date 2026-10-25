@@ -31,6 +31,7 @@ will match a word used innocently. It is a floor, not a guarantee, and the
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 import re
 
 from maskvault.models.action import Action
@@ -173,13 +174,54 @@ class SpecialCategories:
         )
 
     @staticmethod
+    def vocabularies(
+        extra: Mapping[str, Iterable[str]] | None = None,
+    ) -> dict[str, frozenset[str]]:
+        """Return the shipped vocabularies, merged with `extra`.
+
+        A name already shipped is *extended*, not replaced — the shipped
+        terms stay. A name that is not becomes a new category. Both are the
+        things people actually want:
+
+            # a term the health list misses
+            vocabularies({"health": ["long covid", "neuropathy"]})
+
+            # a category of your own
+            vocabularies({"diagnosis": ["fibromyalgia"]})
+
+        Extending rather than replacing is deliberate. A caller adding one
+        term almost never means "and discard the other hundred", and the
+        version that silently did would be a privacy regression dressed as a
+        convenience. To replace a category, pass your own set to
+        `category_detector` directly.
+
+        Terms are lower-cased, because matching is case-insensitive and a
+        capitalized entry would otherwise look like it worked while matching
+        nothing extra.
+        """
+        merged = {name: set(terms) for name, terms in SPECIAL_CATEGORIES.items()}
+        for name, terms in (extra or {}).items():
+            merged.setdefault(name, set()).update(
+                term.strip().lower() for term in terms if term.strip()
+            )
+        return {name: frozenset(terms) for name, terms in merged.items()}
+
+    @staticmethod
     def special_category_detectors(
         categories: tuple[str, ...] | None = None,
+        extra: Mapping[str, Iterable[str]] | None = None,
     ) -> tuple[Detector, ...]:
-        """Detectors for the special categories, all of them by default."""
-        chosen = categories or tuple(SPECIAL_CATEGORIES)
+        """Detectors for the special categories, all of them by default.
+
+        `extra` adds terms or whole categories; see `vocabularies`. A name in
+        `categories` that neither ships nor appears in `extra` is skipped
+        rather than raising, so a caller can name a category they expect a
+        future version to add.
+        """
+        available = SpecialCategories.vocabularies(extra)
+        chosen = categories or tuple(available)
         return tuple(
-            SpecialCategories.category_detector(name, SPECIAL_CATEGORIES[name])
+            SpecialCategories.category_detector(name, available[name])
             for name in chosen
-            if name in SPECIAL_CATEGORIES
+            if name in available
         )

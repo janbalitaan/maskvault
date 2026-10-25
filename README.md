@@ -4,9 +4,9 @@ Reversible anonymization with a vault. Replace confidential values with
 tokens, pass the text through anything, restore the originals afterwards.
 
 [![PyPI](https://img.shields.io/pypi/v/maskvault)](https://pypi.org/project/maskvault/)
-[![Python](https://img.shields.io/pypi/pyversions/maskvault)](https://pypi.org/project/maskvault/)
-[![CI](https://github.com/janbalitaan/maskvault/actions/workflows/ci.yaml/badge.svg)](https://github.com/janbalitaan/maskvault/actions/workflows/ci.yaml)
-[![License](https://img.shields.io/pypi/l/maskvault)](https://github.com/janbalitaan/maskvault/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://github.com/janbalitaan/maskvault/blob/main/pyproject.toml)
+[![CI](https://github.com/janbalitaan/maskvault/actions/workflows/ci.yml/badge.svg)](https://github.com/janbalitaan/maskvault/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/janbalitaan/maskvault/blob/main/LICENSE)
 
 ```python
 from maskvault import Anonymizer, Level
@@ -24,6 +24,17 @@ It is not tied to any one destination. The same mechanism serves a prompt sent
 to a provider, a log line shipped to a vendor, a dataset handed to a
 contractor, a bug report pasted into a tracker, or a support transcript
 reviewed by a third party.
+
+## Examples
+
+Runnable files in [`examples/`](https://github.com/janbalitaan/maskvault/blob/main/examples/README.md),
+each self-contained and printing what it did:
+
+```bash
+python examples/01_round_trip.py
+```
+
+Every one is run by the test suite, so an example that stops working fails CI.
 
 ## Documentation
 

@@ -271,17 +271,67 @@ class Anonymizer:
         )
 
     def leaked(self, text: str, vault: Vault) -> list[str]:
-        """Tokens still in the text after restoring.
+        """Tokens still in the text after restoring, in any shape.
 
-        A model that mangled a token leaves one behind. Checking lets the
-        caller fall back to a deterministic answer rather than show
-        "[[ORG_2]]" to a recruiter.
+        The check to run on every model reply. A model that altered a token
+        leaves one behind, and restoring cannot match it — so without this the
+        reply has quietly lost a value and nothing says so.
+
+        Catches both well-formed tokens this vault does not know and tokens
+        the model changed: inner spaces, dropped or swapped delimiters, a
+        lower-cased label, one broken over a line break.
+
+        **Over-reports rather than under-reports, deliberately.** A reply
+        discussing a column literally named `EMAIL_1` is flagged, which costs
+        a fallback on a request that was fine. The alternative is a value
+        silently missing from an answer somebody acts on, and between those
+        two the choice is not close.
         """
         restored = self.restore(text, vault)
-        # The vault's own pattern, so a token written in one format is not
-        # judged against another — and so a wikilink in text that used a
-        # different format is not mistaken for a mangled token.
-        return [match.group(0) for match in vault.pattern.finditer(restored)]
+        # Two kinds of leftover, and the second is the common one.
+        #
+        # A well-formed token this vault does not know: the model invented
+        # `!|EMAIL_9|!`, or the wrong vault was used. Found by the vault's own
+        # pattern, so a token written in one format is not judged against
+        # another.
+        found = {match.group(0) for match in vault.pattern.finditer(restored)}
+        # A token the model *altered*, which restoring could not match and
+        # the pattern cannot see: `!| EMAIL_1 |!`, `EMAIL_1`, `[EMAIL_1]`,
+        # `!|email_1|!`, one split across a line break. Checking only for
+        # well-formed tokens reported nothing for any of those, so a reply
+        # that had silently lost its value looked clean.
+        found.update(self._mangled(restored, vault))
+        return sorted(found)
+
+    @staticmethod
+    def _mangled(text: str, vault: Vault) -> set[str]:
+        """Find label-and-index cores from this vault that survived in the text.
+
+        The delimiters are what a model changes; the `LABEL_1` core is what it
+        tends to keep. So the core is what to look for, case-insensitively and
+        tolerating whitespace where the model may have broken a line.
+
+        Reported as the core rather than as whatever surrounds it, because the
+        caller's question is "did a token fail to restore", not "what exactly
+        did the model write".
+        """
+        cores = set()
+        pattern = vault.token_format.pattern
+        for token in vault.snapshot():
+            match = pattern.fullmatch(token)
+            if match:
+                cores.add(f"{match.group(1)}_{match.group(2)}")
+        if not cores:
+            return set()
+        # Whitespace-tolerant, so a core broken over a line break is still
+        # recognized: "EMAIL\n_1" is the same failure as "EMAIL_1".
+        alternation = "|".join(
+            re.escape(core).replace("_", r"\s*_\s*") for core in sorted(cores)
+        )
+        return {
+            re.sub(r"\s+", "", match.group(0)).upper()
+            for match in re.finditer(alternation, text, re.IGNORECASE)
+        }
 
     @staticmethod
     def _compile_terms(terms: dict[str, list[str]]) -> list[tuple[str, re.Pattern[str]]]:
