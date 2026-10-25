@@ -25,6 +25,29 @@ to a provider, a log line shipped to a vendor, a dataset handed to a
 contractor, a bug report pasted into a tracker, or a support transcript
 reviewed by a third party.
 
+## Documentation
+
+Full documentation is in [`docs/`](https://github.com/janbalitaan/maskvault/blob/main/docs/README.md):
+
+| Page | |
+| --- | --- |
+| [Getting started](https://github.com/janbalitaan/maskvault/blob/main/docs/getting-started.md) | Install, a first round trip, wiring it in |
+| [Levels](https://github.com/janbalitaan/maskvault/blob/main/docs/levels.md) | The four strictness levels |
+| [Detection](https://github.com/janbalitaan/maskvault/blob/main/docs/detection.md) | What is found, and how |
+| [Whitelisting](https://github.com/janbalitaan/maskvault/blob/main/docs/whitelisting.md) | Nine mechanisms for taking control back |
+| [Token formats](https://github.com/janbalitaan/maskvault/blob/main/docs/token-formats.md) | Delimiters, collisions, the default |
+| [Structured data](https://github.com/janbalitaan/maskvault/blob/main/docs/structured-data.md) | Dicts, lists and JSON |
+| [Stores](https://github.com/janbalitaan/maskvault/blob/main/docs/stores.md) | Moving a vault between processes and nodes |
+| [Encryption](https://github.com/janbalitaan/maskvault/blob/main/docs/encryption.md) | Who encrypts, who holds the key |
+| [Concurrency](https://github.com/janbalitaan/maskvault/blob/main/docs/concurrency.md) | One anonymizer, many callers |
+| [Command line](https://github.com/janbalitaan/maskvault/blob/main/docs/cli.md) | Cleaning a file or a pipe |
+| [API reference](https://github.com/janbalitaan/maskvault/blob/main/docs/api.md) | Every public name |
+| [Security](https://github.com/janbalitaan/maskvault/blob/main/docs/security.md) | What this protects, and what it does not |
+| [Limitations](https://github.com/janbalitaan/maskvault/blob/main/docs/limitations.md) | Stated plainly |
+
+Security reports go through
+[SECURITY.md](https://github.com/janbalitaan/maskvault/blob/main/SECURITY.md) rather than an issue.
+
 ## Install
 
 ```bash

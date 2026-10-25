@@ -1,0 +1,121 @@
+# Limitations
+
+Stated plainly, because a privacy tool that overstates itself is worse than
+one that does less. Each of these is a reasonable thing to send a pull
+request about.
+
+## Detection is a check against carelessness
+
+Four families of detector catch what they recognize: published credential
+formats, personal identifiers with a shape, vocabulary terms, and the entropy
+net for randomness nobody anticipated.
+
+What goes through: a value with no recognizable shape under no recognizable
+key. A credential split across two fields. One base64-encoded or assembled at
+runtime. A vendor whose format is not in the list. A name, unless you name it
+in `terms`.
+
+`explain()` on real input is the way to find out what your text actually
+contains, and `suggest_whitelist()` turns that reading into config.
+
+## It does not encrypt a value in memory
+
+A resolved value is plaintext in process memory, like any other string. To
+decrypt you would need the key, and the key would live in the same process —
+so an attacker who can read your memory reads both.
+
+Wiping is no better. A `str` is immutable and cannot be overwritten, and
+holding values in a `bytearray` fails on first use:
+
+```python
+secret = bytearray(b"the-password")
+connect(secret.decode())            # an immutable str copy, out of reach
+secret[:] = b"\x00" * len(secret)   # wipes one copy of several
+```
+
+If a value must not be readable by whatever can read your process, that needs
+an HSM, an enclave, or a service that holds the key and performs the
+operation for you.
+
+What *is* worth encrypting is a stored vault, where the key stays in your
+application and the ciphertext goes elsewhere. See
+[encryption](encryption.md).
+
+## A model that reformats a token breaks restoring
+
+No delimiter choice fixes this. `!|EMAIL_1|` is rejected exactly as
+`@@EMAIL_1@` was — neither is silently restored, which is the important
+part, but neither comes back either.
+
+```python
+if leftover := anonymizer.leaked(answer, vault):
+    return fallback()
+```
+
+That check is not optional in a production path.
+
+## Vocabulary detection produces false positives
+
+The special categories are word lists, because there is no *shape* to a
+religion. So "trans", "cis", "strike", "chronic", "mi" and "dl" all match
+something they should not in a technical sentence.
+
+`TECHNICAL_HOMONYMS` blunts the common ones, and `STRICT` is opt-in rather
+than the default for this reason. Beyond that it is your whitelist's job, and
+`suggest_whitelist()` is how to build one from real text rather than guesses.
+
+## Overlapping detectors mean the label is a choice
+
+The first detector to claim a span wins. An IP address is also a punctuated
+digit run; a Stripe key is also a high-entropy blob. The order is chosen so
+the more specific one wins, but it means:
+
+- whitelisting one `label` can leave a looser detector claiming the value
+- `values` is compared against the whole match, which may be wider than you
+  expect
+
+[Whitelisting](whitelisting.md) covers both, and `explain()` shows which span
+was claimed.
+
+## A vault is as sensitive as the input
+
+It maps tokens back to original values. Storing one moves the exposure rather
+than removing it; logging one undoes the whole exercise. `summary()` is the
+part that is safe to write down.
+
+And a token means nothing without its vault. Two vaults mint the same strings
+unless you use `Vault.scoped()`, so never merge two and never persist tokens
+without the vault that explains them.
+
+## Numbers and bytes are left alone
+
+A number has no delimiters to tokenize into, and coercing it would change the
+type of data passing through. `stringify_numbers=True` opts in.
+
+`bytes` is skipped entirely — it is a `Sequence`, and walking one would turn a
+blob into a list of integers.
+
+## Depth is capped, not detected
+
+A structure 64 levels deep stops being walked rather than raising. A cycle is
+not detected; the cap is what stops the recursion, because cycle detection at
+every node costs more than it saves.
+
+## Terms are literal and word-bounded
+
+`terms={"employer": ["Initech"]}` matches `Initech`, not `Initech Inc` as a
+unit and not `initech.com` as a whole. For anything with structure, write a
+`Detector` with a pattern.
+
+## Only one language's worth of vocabulary
+
+The special-category word lists are English. A detector built from
+`SpecialCategories.category_detector(category, terms)` takes any vocabulary
+you supply, but the shipped lists will not catch a disclosure in another
+language.
+
+## It is not a DLP product
+
+No scanning of files at rest, no policy server, no audit trail, no
+classification taxonomy. It anonymizes text you hand it, in-process, and
+hands the mapping back to you. Everything else is yours to build.

@@ -12,11 +12,6 @@ First release.
 
 ### Added
 
-- `anonymize_data` and `restore_data`, which walk dicts, lists and JSON rather
-  than only strings. One vault covers the whole structure.
-- `Anonymizer.anonymize_into`, which accumulates into an existing vault so
-  many strings can share one.
-
 - Reversible anonymization with a vault. Values are replaced with tokens and
   restored afterwards, so a third party never sees them while your reader
   still gets a correct answer.
@@ -25,26 +20,62 @@ First release.
 - Four strictness levels: `MINIMAL`, `STANDARD`, `STRICT`, `PARANOID`.
 - Around 20 vendor credential formats, connection strings with embedded
   credentials, and auth headers.
-- Structured personal identifiers: addresses, salaries, coordinates, licenses,
-  policy and account numbers, tax IDs, social handles, ages.
+- Structured personal identifiers: addresses, salaries, coordinates,
+  licences, policy and account numbers, tax IDs, social handles, ages.
 - Vocabularies for the GDPR Article 9 special categories — health, religion,
-  politics, identity, origin — plus criminal and financial history.
-- A Shannon-entropy net for secrets whose format nobody anticipated.
+  politics, identity, origin — plus criminal and financial history, with
+  `TECHNICAL_HOMONYMS` to blunt the words that mean something else in a
+  technical sentence.
+- A Shannon-entropy net for secrets whose format nobody anticipated, gated
+  on four conditions rather than entropy alone — because "the quick brown fox
+  jumps" scores above 4 bits.
 - Default-deny allowlisting with nine mechanisms (labels, categories, values,
   words, substrings, prefixes, suffixes, domains, regexes) and a `predicate`
-  escape hatch for anything else.
-- `explain()`, `preview()` and `suggest_whitelist()`, so a policy can be built
-  from real input instead of guesswork.
+  escape hatch for anything else. An unrecognized key raises with a mapped
+  suggestion, so a typo cannot leave a whitelist silently unapplied.
+- `explain()`, `preview()` and `suggest_whitelist()`, so a policy can be
+  built from real input instead of guesswork. `explain()` reports exactly
+  what `anonymize()` will do — same count, same labels.
+- `anonymize_data` and `restore_data`, which walk dicts, lists, sets and JSON
+  rather than only strings. One vault covers the whole structure.
+- `Anonymizer.anonymize_into`, which accumulates into an existing vault so
+  many strings — a conversation turn by turn — can share one.
 - Configurable token formats, chosen per operation to avoid colliding with
-  wikilink or template syntax already in the text, and validated at
-  construction so a format that cannot read back its own output is refused.
-  The default is `@@LABEL_1@@`: collision avoidance can only inspect the text
-  it is given, so it cannot know the output will later be rendered as
-  Markdown or pasted into a wiki, where double square brackets are a link.
-  At-signs are claimed by no common markup. `token_format="brackets"` gives
-  the square-bracket form.
-- `random_format()` for unguessable delimiters.
-- No dependencies.
-
-[Unreleased]: https://github.com/janbalitaan/maskvault/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/janbalitaan/maskvault/releases/tag/v0.1.0
+  markup already in the text, and validated at construction so a format that
+  cannot read back its own output is refused. The default is `!|LABEL_1|!`,
+  picked by testing each candidate against what people actually paste into a
+  model: diffs, Markdown, wikilinks, README badges, GitHub alerts, Jinja,
+  HTML, YAML, SQL, shell, Haskell, Rust attributes and the `<|...|>`
+  special-token convention. `random_format()` gives unguessable delimiters.
+- A command line: `maskvault explain`, `anonymize`, `restore` and `policy`.
+  `explain` prints labels, actions and positions and **no values**, so it is
+  safe in CI, and exits 1 when something is found.
+- Vault stores for when a vault must outlive the request:
+  `MemoryVaultStore` for one process, `SerializedVaultStore` for any
+  key-value backend, `DatabaseVaultStore` for any PEP 249 connection. The
+  `VaultStore` and `KeyValueBackend` ports keep Redis, Memcached and the
+  database drivers out of this package.
+- Encryption for a stored vault, through the `encryption` extra:
+  `FernetCipher` for authenticated encryption, `PlaintextCipher` as an
+  explicit opt-out, `VaultCipher` as the port for a KMS or an HSM. A store
+  refuses to be built without a cipher being chosen, because there is no
+  secure default — a key cannot be invented.
+- `Vault.scoped()`, for the deployment where anonymizing and restoring happen
+  in different processes. A random marker in every label means two vaults
+  cannot mint the same token, so the wrong vault leaves a token visible
+  rather than resolving it to another caller's value.
+- `Vault.as_dict()` and `Vault.from_dict()`, a lossless JSON round trip —
+  values, destroyed labels, scope and the format's own patterns. JSON rather
+  than pickle, because a pickled payload is executable on load.
+- `ttl_seconds=0` means no expiry, handing retention to the caller. A
+  negative value raises rather than being read as zero, because a computed
+  TTL that came out negative is a bug rather than a request to keep
+  plaintext forever.
+- One `Anonymizer` is safe to share across concurrent callers, and so is one
+  `Vault`. Covered by `tests/concurrency/` under threads, asyncio, a thread
+  pool and separate processes.
+- Full documentation in `docs/`, and a test that keeps it honest: every link
+  resolves, every page is reachable, every name in the API reference is
+  importable, and every import in a code block works.
+- No required dependencies. Python 3.10 and newer, fully typed, with
+  `py.typed`.

@@ -38,14 +38,20 @@ class Vault:
     #
     # Not part of the dataclass's identity: a lock is machinery, not data, so
     # it is excluded from comparison and repr.
-    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, repr=False, compare=False, init=False
+    )
 
     # The next index per label, and the reverse mapping that gives a repeated
     # value its existing token. Both are derivable from `values`, and both are
     # kept here rather than rebuilt per call so that allocating a token is one
     # atomic step instead of a read followed by a write.
-    _counters: dict[str, int] = field(default_factory=dict, repr=False, compare=False)
-    _reverse: dict[str, str] = field(default_factory=dict, repr=False, compare=False)
+    _counters: dict[str, int] = field(
+        default_factory=dict, repr=False, compare=False, init=False
+    )
+    _reverse: dict[str, str] = field(
+        default_factory=dict, repr=False, compare=False, init=False
+    )
 
     # Which placeholder format these tokens are written in. Recorded here
     # because restoring needs it, and because the format is chosen per
