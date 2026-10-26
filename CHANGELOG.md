@@ -81,8 +81,18 @@ First release.
   it, since a BOM is the payload declaring its own encoding rather than a
   guess — and nothing else is guessed: latin-1 and cp1252 decode *any* byte
   sequence, so trying them as a fallback would decode an image successfully,
-  scan it as text, and corrupt it on one chance match. A codec that does not
-  round trip is refused before anything is replaced.
+  scan it as text, and corrupt it on one chance match.
+  - The mark is handled as data, not by the codec: split off, carried, and
+    written back verbatim. Letting the codec do it meant `utf-8-sig`,
+    `utf-16` and `utf-32` decoded unmarked bytes cleanly and then re-encoded
+    *with* a mark that was never there — so the round trip was inexact and
+    those bytes were skipped, silently. `utf-8-sig` is exactly what a caller
+    declares for files that may or may not carry one, so a mixed batch had
+    its unmarked members pass through in the clear.
+  - A codec with more than one spelling for a character is still refused,
+    per payload rather than per encoding: `utf-7` writes `A` as the byte or
+    as `+AEE-`, and re-encoding picks the shorter, which would rewrite a
+    payload nothing was wrong with.
 - `anonymize_data` scans dict keys by default. A key is usually schema, and a
   schema key matches no detector — but `{"alice@acme.com": {...}}` is how a
   map of users by email address looks and `{"10.42.7.19": "primary"}` is how

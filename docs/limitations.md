@@ -206,8 +206,28 @@ encoding rather than a guess.
 it *refuses* what it cannot read — a PNG raises and is left alone. latin-1
 and cp1252 decode any byte sequence at all, so trying them as a fallback
 would decode an image successfully, scan it as text, and corrupt it on the
-one chance match. The remaining gap is narrow: an undeclared, unmarked,
-non-UTF-8 payload. There is no safe way to recognize one.
+one chance match.
+
+A mark is handled as data rather than by the codec: split off, carried, and
+written back verbatim. That is what lets `utf-8-sig`, `utf-16` and `utf-32`
+be scanned at all. Letting the codec do it meant unmarked bytes decoded
+cleanly and then re-encoded *with* a mark, so the round trip was inexact and
+those bytes were skipped — silently, and `utf-8-sig` is exactly what a
+caller declares for files that may or may not carry one.
+
+Two narrow gaps remain, both refusals rather than failures:
+
+**An undeclared, unmarked, non-UTF-8 payload** is left alone. There is no
+safe way to recognize one.
+
+**A codec with more than one spelling for the same character** is refused
+per-payload. `utf-7` can write `A` as the byte or as `+AEE-`, and
+`iso2022_jp` can reach it through an escape sequence; both re-encode to the
+shorter form, so writing the text back would rewrite a payload nothing was
+wrong with — a diff where there should be none, and in a signed body, a
+broken one. An ordinary payload in the same codec is still scanned; it is
+the byte sequences that would not round trip that are declined, not the
+encoding.
 
 ## Terms are literal and word-bounded
 
