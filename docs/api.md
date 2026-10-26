@@ -96,7 +96,7 @@ Never log a vault itself. `summary()` is the part that is safe.
 ```python
 anonymize_data(
     data, anonymizer, *,
-    include_keys=False,       # keys are schema, not data
+    include_keys=True,        # a key can be the data; False for values only
     stringify_numbers=False,  # a bare integer may be an account number
     skip_keys=None,           # frozenset[str] — a subtree to leave alone
 ) -> tuple[Any, Vault]

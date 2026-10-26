@@ -75,6 +75,14 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
+- `anonymize_data` scans dict keys by default. A key is usually schema, and a
+  schema key matches no detector — but `{"alice@acme.com": {...}}` is how a
+  map of users by email address looks and `{"10.42.7.19": "primary"}` is how
+  a host map looks. Those keys are the data, so leaving keys unexamined meant
+  the structure most likely to be keyed by an identifier was the one that
+  leaked it. `include_keys=False` restores the old behaviour for a
+  downstream system that matches on the literal key; `skip_keys` names
+  individual keys rather than all of them.
 - A structure deeper than the walk limit now raises `StructureError` instead
   of being returned unchanged. The old behaviour was a silent leak: a
   structure eighty levels deep had every value below sixty-four pass through

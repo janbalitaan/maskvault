@@ -48,12 +48,24 @@ def anonymize_data(
     data: Any,
     anonymizer: Anonymizer,
     *,
-    include_keys: bool = False,
+    include_keys: bool = True,
     stringify_numbers: bool = False,
     skip_keys: frozenset[str] | None = None,
     max_depth: int = MAX_STRUCTURE_DEPTH,
 ) -> tuple[Any, Vault]:
     """Walk a structure, replacing sensitive values, and return it with a vault.
+
+    `include_keys` scans the keys as well as the values, and defaults to
+    **on**. A key holding personal data is personal data: `{"alice@acme.com":
+    {...}}` is how a map of users by email address looks, and leaving it
+    unexamined meant the one structure most likely to be keyed by an
+    identifier was the one structure that leaked it. Ordinary structural keys
+    — `email`, `name`, `user_id` — match no detector and pass through
+    untouched, so this costs nothing on a normal payload.
+
+    Turn it off where a downstream system matches on the literal key and
+    tokenizing one would break it; `skip_keys` is the narrower tool for the
+    same job.
 
     `skip_keys` names keys whose values pass through untouched — useful for
     an id or a timestamp that a downstream system matches on and that would

@@ -39,15 +39,27 @@ class TestWalkingData:
         assert safe["primary"] == safe["backup"]
         assert vault.replaced == 1
 
-    def test_keys_are_left_alone_by_default(self, anonymizer):
-        """A key is schema, not data. Replacing it would make the output
-        unparseable by whatever reads it next."""
-        safe, _ = anonymize_data({"me@acme.com": "value"}, anonymizer)
+    def test_a_key_holding_personal_data_is_replaced(self, anonymizer):
+        """A map keyed by email address is an ordinary shape, and leaving
+        keys unexamined meant it was the one shape that leaked."""
+        safe, vault = anonymize_data({"me@acme.com": "value"}, anonymizer)
+        assert "me@acme.com" not in safe
+        assert len(vault.values) == 1
+
+    def test_structural_keys_are_untouched(self, anonymizer):
+        payload = {"email": "a@b.com", "name": "Bob", "host": "localhost"}
+        safe, _ = anonymize_data(payload, anonymizer)
+        assert set(safe) == {"email", "name", "host"}
+
+    def test_keys_can_be_excluded(self, anonymizer):
+        safe, _ = anonymize_data({"me@acme.com": "value"}, anonymizer, include_keys=False)
         assert "me@acme.com" in safe
 
-    def test_keys_can_be_included(self, anonymizer):
-        safe, _ = anonymize_data({"me@acme.com": "value"}, anonymizer, include_keys=True)
-        assert "me@acme.com" not in safe
+    def test_a_map_keyed_by_host_round_trips(self, anonymizer):
+        payload = {"10.42.7.19": "primary", "10.42.7.20": "replica"}
+        safe, vault = anonymize_data(payload, anonymizer)
+        assert "10.42.7.19" not in repr(safe)
+        assert restore_data(safe, anonymizer, vault) == payload
 
     def test_numbers_are_left_alone_by_default(self, anonymizer):
         """Coercing a number to a string would change the type of the data

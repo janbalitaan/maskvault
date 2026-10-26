@@ -23,15 +23,20 @@ places gets the same token and restoring puts both back.
 
 ## Three decisions worth knowing
 
-**Keys are left alone by default.** A key is schema, not data — replacing
-`email` with a token would make the output unparseable by whatever reads it.
+**Keys are scanned, like values.** A key is usually schema — and a schema
+key matches no detector, so `email`, `name` and `user_id` pass through
+untouched. But `{"alice@acme.com": {...}}` is how a map of users by email
+address looks, and `{"10.42.7.19": "primary"}` is how a host map looks. Those
+keys *are* the data, and leaving them unexamined meant the structure most
+likely to be keyed by an identifier was the one that leaked it.
 
 ```python
-anonymize_data(data, anonymizer, include_keys=True)
+anonymize_data(data, anonymizer, include_keys=False)
 ```
 
-is there for the case where a key is itself sensitive, as in
-`{"my.private.hostname": ...}`.
+turns it off, for a downstream system that matches on the literal key.
+`skip_keys` is the narrower tool for the same job — it names the keys to
+leave alone rather than all of them.
 
 **Non-string leaves are left alone.** A number, boolean or `None` has no
 delimiters to tokenize into, and coercing them to strings would change the
@@ -53,7 +58,7 @@ every node. Past it, a node is returned untouched rather than raising —
 
 | Type | Handled |
 | --- | --- |
-| `dict` and any `Mapping` | values always, keys with `include_keys` |
+| `dict` and any `Mapping` | values and keys; `include_keys=False` for values only |
 | `list`, `tuple`, any `Sequence` | each element, type preserved |
 | `set`, `frozenset` | each element |
 | `str` | anonymized |

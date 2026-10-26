@@ -520,12 +520,13 @@ restore_data(safe, anonymizer, vault)   # the original, exactly
 ```
 
 One vault covers the whole structure, so a value appearing in two places gets
-one token. Keys are left alone by default, because a key is schema rather than
-data and replacing it would make the output unparseable — pass
-`include_keys=True` when a key is itself sensitive. Numbers are left alone for
-the same reason, with `stringify_numbers=True` to opt in. `skip_keys` passes
-named fields through untouched, for an id or timestamp something downstream
-matches on.
+one token. Keys are scanned too: a schema key like `email` matches no detector
+and passes through, while `{"alice@acme.com": {...}}` — a map of users by
+email address — has its key replaced, because that key is the data. Pass
+`include_keys=False` where something downstream matches on the literal key.
+Numbers are left alone, with `stringify_numbers=True` to opt in. `skip_keys`
+passes named fields through untouched, for an id or timestamp something
+downstream matches on.
 
 ### No format preservation
 

@@ -115,15 +115,35 @@ class TestLeavesThatAreNotStrings:
 
 
 class TestKeys:
-    def test_keys_are_left_alone_by_default(self):
-        """A key is schema, not data — replacing it would make the output
-        unparseable by whatever reads it."""
-        safe, _ = anonymize_data({"me@acme.com": "value"}, Anonymizer())
+    def test_a_key_holding_personal_data_is_replaced(self):
+        """A key is usually schema, but not always.
+
+        `{"alice@acme.com": {...}}` is how a map of users by email address
+        looks, and leaving keys unexamined meant the structure most likely to
+        be keyed by an identifier was the one that leaked it. Scanning them
+        is the default now.
+        """
+        safe, vault = anonymize_data({"me@acme.com": "value"}, Anonymizer())
+        assert "me@acme.com" not in safe
+        assert len(vault.values) == 1
+
+    def test_structural_keys_are_untouched(self):
+        """Which is why this costs nothing on a normal payload: `email`,
+        `name` and `user_id` match no detector."""
+        payload = {"email": "a@b.com", "name": "Bob", "user_id": 42}
+        safe, _ = anonymize_data(payload, Anonymizer())
+        assert set(safe) == {"email", "name", "user_id"}
+
+    def test_keys_can_be_excluded(self):
+        """For a downstream system that matches on the literal key."""
+        safe, _ = anonymize_data({"me@acme.com": "value"}, Anonymizer(), include_keys=False)
         assert "me@acme.com" in safe
 
-    def test_keys_can_be_included(self):
-        safe, _ = anonymize_data({"me@acme.com": "value"}, Anonymizer(), include_keys=True)
-        assert "me@acme.com" not in safe
+    def test_a_replaced_key_round_trips(self):
+        payload = {"me@acme.com": "value"}
+        anonymizer = Anonymizer()
+        safe, vault = anonymize_data(payload, anonymizer)
+        assert restore_data(safe, anonymizer, vault) == payload
 
     def test_an_included_key_round_trips(self):
         anonymizer = Anonymizer(level=Level.STANDARD)
