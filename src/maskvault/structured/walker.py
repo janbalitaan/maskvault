@@ -9,6 +9,7 @@ from maskvault.anonymizer import Anonymizer
 from maskvault.constants import MAX_STRUCTURE_DEPTH
 from maskvault.exceptions import StructureError
 from maskvault.models.vault import Vault
+from maskvault.structured.text_bytes import BytesText
 
 
 class Walker:
@@ -121,28 +122,8 @@ class Walker:
         return self._bytes(node)
 
     def _bytes(self, node: bytes | bytearray) -> bytes | bytearray:
-        """Scan bytes that hold text, and leave the rest alone.
-
-        Bytes had no handler, so they fell through unchanged — a request body
-        read as bytes carried its email addresses out in the clear while the
-        strings beside it were masked, and the call reported success.
-
-        Decoded strictly as UTF-8. Bytes that decode are text — a JSON body,
-        a form payload, a file read in binary mode — and are scanned like any
-        string. Bytes that do not are binary: an image, a compressed blob, a
-        key. They cannot hold a readable email address, and guessing at
-        another encoding would be more likely to corrupt them than to find
-        anything. Text in a non-UTF-8 encoding is the gap this leaves, and
-        the remedy is to decode it yourself before anonymizing.
-
-        The type is preserved, so a `bytearray` comes back as one.
-        """
-        try:
-            text = bytes(node).decode("utf-8")
-        except UnicodeDecodeError:
-            return node
-        replaced = self._text(text).encode("utf-8")
-        return bytearray(replaced) if isinstance(node, bytearray) else replaced
+        """Replace inside bytes that hold text, via the shared decoder."""
+        return BytesText.transform(node, self._vault.bytes_encoding, self._text)
 
     def _sequence(self, node: Sequence, depth: int) -> Any:
         """Walk a list or tuple, preserving the original type."""

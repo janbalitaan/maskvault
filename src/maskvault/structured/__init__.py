@@ -52,6 +52,7 @@ def anonymize_data(
     stringify_numbers: bool = False,
     skip_keys: frozenset[str] | None = None,
     max_depth: int = MAX_STRUCTURE_DEPTH,
+    bytes_encoding: str | None = "utf-8",
 ) -> tuple[Any, Vault]:
     """Walk a structure, replacing sensitive values, and return it with a vault.
 
@@ -71,6 +72,13 @@ def anonymize_data(
     an id or a timestamp that a downstream system matches on and that would
     break if tokenized.
 
+    `bytes_encoding` says how to read text held in `bytes`. UTF-8 by default
+    because it refuses binary — a PNG raises and is left alone. Declare
+    another where your payload uses one: `"cp1252"`, `"shift_jis"`. It is
+    recorded on the vault, so restoring cannot use a different one. `None`
+    scans no bytes at all. A byte-order mark overrides it, because a BOM is
+    the payload declaring its own encoding rather than a guess.
+
     `max_depth` bounds the recursion. Past it this **raises** rather than
     returning what it has: the earlier behaviour returned the node unchanged,
     so a structure eighty levels deep had everything below sixty-four pass
@@ -81,7 +89,7 @@ def anonymize_data(
     token_format = anonymizer.token_format or TokenFormats.choose_format(
         TextSampler.sample(data)
     )
-    vault = Vault(token_format=token_format)
+    vault = Vault(token_format=token_format, bytes_encoding=bytes_encoding)
     walker = Walker(
         anonymizer=anonymizer,
         vault=vault,

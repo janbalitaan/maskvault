@@ -75,6 +75,14 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
+- `bytes_encoding` on `anonymize_data`, for text held in bytes in an encoding
+  UTF-8 cannot read. Recorded on the vault, so anonymizing with one encoding
+  and restoring with another is not expressible. A byte-order mark overrides
+  it, since a BOM is the payload declaring its own encoding rather than a
+  guess — and nothing else is guessed: latin-1 and cp1252 decode *any* byte
+  sequence, so trying them as a fallback would decode an image successfully,
+  scan it as text, and corrupt it on one chance match. A codec that does not
+  round trip is refused before anything is replaced.
 - `anonymize_data` scans dict keys by default. A key is usually schema, and a
   schema key matches no detector — but `{"alice@acme.com": {...}}` is how a
   map of users by email address looks and `{"10.42.7.19": "primary"}` is how

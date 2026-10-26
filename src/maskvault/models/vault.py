@@ -78,6 +78,20 @@ class Vault:
     # operation to avoid whatever markup the input already contained.
     token_format: TokenFormat = field(default_factory=TokenFormat.default)
 
+    # How to read text held in `bytes`. Carried here rather than passed to
+    # both halves, because anonymizing with one encoding and restoring with
+    # another would mangle every non-ASCII value — and a second parameter is
+    # a second chance to disagree.
+    #
+    # UTF-8 by default because it refuses binary: a PNG raises
+    # UnicodeDecodeError and is left alone. latin-1 and cp1252 decode *any*
+    # byte sequence, so they cannot be tried as a fallback — an image would
+    # decode "successfully" and be scanned as text, and one chance match
+    # would corrupt it. A caller whose payload is in one of those says so.
+    #
+    # None scans no bytes at all, for a payload known to be binary.
+    bytes_encoding: str | None = "utf-8"
+
     # An optional per-vault marker woven into every label, for the deployment
     # where anonymizing and restoring happen in different processes.
     #
@@ -273,6 +287,7 @@ class Vault:
             # second ago from one minted an hour ago, and `wipe()` would
             # forget both.
             "minted_at": dict(self._minted_at),
+            "bytes_encoding": self.bytes_encoding,
             "scope": self.scope,
             "token_format": self.token_format.as_dict(),
         }
@@ -298,6 +313,9 @@ class Vault:
             destroyed=list(data.get("destroyed") or []),
             scope=str(data.get("scope") or ""),
             token_format=(TokenFormat.from_dict(stored) if stored else TokenFormat.default()),
+            # A vault written before this was recorded used UTF-8, which is
+            # also the default, so the absent case needs no special handling.
+            bytes_encoding=data.get("bytes_encoding", "utf-8"),
         )
         vault._adopt_mint_times(data.get("minted_at"))
         return vault

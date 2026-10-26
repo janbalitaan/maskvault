@@ -1,8 +1,22 @@
 # Limitations
 
-Stated plainly, because a privacy tool that overstates itself is worse than
-one that does less. Each of these is a reasonable thing to send a pull
-request about.
+Two kinds of thing are listed here, and the difference matters.
+
+**Properties of the problem.** Detection cannot be complete, a vault cannot be
+less sensitive than its input, and `Room 221B` cannot be told from a meeting
+room without understanding the sentence. These do not get fixed; they get
+understood, and the whitelist and the strictness levels exist to let you
+place the trade where your data needs it.
+
+**Bounds with a lever.** A depth limit, an encoding, a word list in one
+language. These have a parameter, and the parameter is named in each section.
+
+What is *not* here any more, because it was a defect rather than a limit: a
+structure past the depth limit returning its values unexamined, a cycle
+putting the original object into the output, bytes going out unscanned, dict
+keys going out unscanned, a bare integer read as a phone number, and
+`policy allows 3 retries` read as a policy number. Those were fixed. If you
+read an older version of this page, check the changelog.
 
 ## Detection is a check against carelessness
 
@@ -146,13 +160,13 @@ And a token means nothing without its vault. Two vaults mint the same strings
 unless you use `Vault.scoped()`, so never merge two and never persist tokens
 without the vault that explains them.
 
-## Numbers and bytes are left alone
+## Numbers are left alone
 
 A number has no delimiters to tokenize into, and coercing it would change the
-type of data passing through. `stringify_numbers=True` opts in.
+type of data passing through — a downstream schema expecting an integer gets a
+string. `stringify_numbers=True` opts in where that is acceptable.
 
-`bytes` is skipped entirely — it is a `Sequence`, and walking one would turn a
-blob into a list of integers.
+Bytes used to be listed here too. They are scanned now; see below.
 
 ## Depth is bounded, and exceeding it raises
 
@@ -175,16 +189,25 @@ anonymize_data(payload, anonymizer, max_depth=200)
 Restoring still stops quietly at the cap, because the failure there is
 different: an unrestored token is a token, which `leaked()` reports.
 
-## Text in bytes is decoded as UTF-8
+## Text in bytes needs its encoding declared
 
-Bytes that decode are scanned like any string, so a request body read in
-binary mode is covered. Bytes that do not decode are binary — an image, a
-compressed blob, a key — and are left alone: they cannot hold a readable
-email address, and guessing at another encoding would be more likely to
-corrupt them than to find anything.
+Bytes that decode as UTF-8 are scanned like any string, so a request body
+read in binary mode is covered by default. For another encoding, say so:
 
-**Text in a non-UTF-8 encoding is the gap this leaves.** Decode it yourself
-before anonymizing.
+```python
+anonymize_data(payload, anonymizer, bytes_encoding="cp1252")
+```
+
+It is recorded on the vault, so restoring cannot use a different one. A
+byte-order mark overrides it, because a BOM is the payload declaring its own
+encoding rather than a guess.
+
+**Nothing is guessed, and that is deliberate.** UTF-8 is the default because
+it *refuses* what it cannot read — a PNG raises and is left alone. latin-1
+and cp1252 decode any byte sequence at all, so trying them as a fallback
+would decode an image successfully, scan it as text, and corrupt it on the
+one chance match. The remaining gap is narrow: an undeclared, unmarked,
+non-UTF-8 payload. There is no safe way to recognize one.
 
 ## Terms are literal and word-bounded
 

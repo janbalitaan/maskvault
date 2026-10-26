@@ -14,6 +14,7 @@ from typing import Any
 from maskvault.anonymizer import Anonymizer
 from maskvault.constants import MAX_STRUCTURE_DEPTH
 from maskvault.models.vault import Vault
+from maskvault.structured.text_bytes import BytesText
 
 
 class Restorer:
@@ -60,22 +61,16 @@ class Restorer:
         return self._bytes(data)
 
     def _bytes(self, data: bytes | bytearray) -> bytes | bytearray:
-        """Restore inside bytes that hold text.
+        """Restore inside bytes, using the encoding the vault recorded.
 
-        The mirror of the walker's handler. Without this the walk masked a
-        byte string and the restore could not undo it, which is worse than
-        not masking it at all: the value was in the vault, the token was in
-        the payload, and the caller got neither back.
-
-        Bytes that do not decode as UTF-8 were never scanned, so there is
-        nothing in them to restore.
+        The vault carries it so that anonymizing with one encoding and
+        restoring with another is not expressible.
         """
-        try:
-            text = bytes(data).decode("utf-8")
-        except UnicodeDecodeError:
-            return data
-        restored = self._anonymizer.restore(text, self._vault).encode("utf-8")
-        return bytearray(restored) if isinstance(data, bytearray) else restored
+        return BytesText.transform(
+            data,
+            self._vault.bytes_encoding,
+            lambda text: self._anonymizer.restore(text, self._vault),
+        )
 
     def _mapping(self, data: Mapping, depth: int) -> dict:
         """Restore a mapping, handling keys only where they were replaced."""
