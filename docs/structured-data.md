@@ -49,10 +49,24 @@ anonymize_data(data, anonymizer, stringify_numbers=True)
 opts in, for the case where a bare integer is an account number. A number
 that matches nothing keeps its type.
 
-**Depth is capped** at 64 levels. A structure that references itself would
-otherwise recurse forever, and the cap is cheaper than cycle detection at
-every node. Past it, a node is returned untouched rather than raising —
-`RecursionError` taking down the caller's request is the worse outcome.
+**Depth is bounded** at 64 levels, and past it this raises. Returning the
+node untouched was the earlier behaviour and it was a silent leak: a
+structure eighty levels deep had every value below sixty-four pass through
+unexamined, with an empty vault and a successful return.
+
+```python
+anonymize_data(payload, anonymizer, max_depth=200)
+```
+
+raises the bound for a structure that is genuinely that deep. A structure
+that **refers to itself** raises separately and says so, rather than being
+left to the depth bound — at the bound a cycle put a reference to the
+original object into the output, real values and all. The same object
+appearing twice side by side is still walked, since only the current path is
+tracked.
+
+Restoring still stops quietly at the bound, because the failure there is
+different: an unrestored token is a token, which `leaked()` reports.
 
 ## What is walked
 

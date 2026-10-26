@@ -16,31 +16,32 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from maskvault.constants import SCOPE_LETTERS
-from maskvault.scopes import ALPHABET, GENERATOR, ScopeGenerator, encode
+from maskvault.scopes import GENERATOR, ScopeGenerator
+from maskvault.utils.letters import LetterCode
 
 
-class TestEncode:
+class TestLetterCode:
     def test_it_produces_the_requested_width(self):
-        assert len(encode(0, 6)) == 6
-        assert len(encode(10**12, 6)) == 6
+        assert len(LetterCode.encode(0, 6)) == 6
+        assert len(LetterCode.encode(10**12, 6)) == 6
 
     def test_zero_is_the_first_letter_repeated(self):
-        assert encode(0, 4) == ALPHABET[0] * 4
+        assert LetterCode.encode(0, 4) == LetterCode.ALPHABET[0] * 4
 
     def test_consecutive_numbers_differ(self):
-        assert encode(1, 4) != encode(2, 4)
+        assert LetterCode.encode(1, 4) != LetterCode.encode(2, 4)
 
     def test_it_is_letters_only(self):
         """A digit would stop a scoped token matching its own vault's
         pattern, which is what `leaked()` relies on."""
-        rendered = encode(123456789, 8)
+        rendered = LetterCode.encode(123456789, 8)
         assert rendered.isalpha()
         assert rendered.isupper()
 
     def test_it_wraps_rather_than_widening(self):
         """A fixed width keeps a token's shape stable. Wrapping is safe
         because the prefix, not the counter, separates processes."""
-        assert len(encode(len(ALPHABET) ** 4, 4)) == 4
+        assert len(LetterCode.encode(LetterCode.BASE**4, 4)) == 4
 
 
 class TestAGeneratorDoesNotRepeat:

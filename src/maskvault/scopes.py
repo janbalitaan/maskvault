@@ -26,30 +26,9 @@ from __future__ import annotations
 
 import itertools
 import secrets
-import string
 import threading
 
-ALPHABET = string.ascii_uppercase
-
-# Letters rather than digits or hex throughout. The scope goes into the token
-# *label*, and the default `label_pattern` is `[A-Z_]+` — a digit would stop a
-# scoped token matching its own vault's pattern, which is what `leaked()`
-# relies on to report a token the model altered.
-_BASE = len(ALPHABET)
-
-
-def encode(number: int, letters: int) -> str:
-    """Render a non-negative integer as exactly `letters` letters.
-
-    Wraps rather than widening, so a marker's width is fixed and a token's
-    shape does not change after a few hundred million vaults. Wrapping is
-    safe because the prefix, not the counter, is what separates processes.
-    """
-    marker = []
-    for _ in range(letters):
-        number, index = divmod(number, _BASE)
-        marker.append(ALPHABET[index])
-    return "".join(marker)
+from maskvault.utils.letters import LetterCode
 
 
 class ScopeGenerator:
@@ -88,7 +67,7 @@ class ScopeGenerator:
         counter_letters = min(len(self._prefix), max(1, letters // 2))
         prefix_letters = letters - counter_letters
         prefix = (self._prefix * 2)[:prefix_letters]
-        return prefix + encode(number, counter_letters)
+        return prefix + LetterCode.encode(number, counter_letters)
 
     @staticmethod
     def capacity(letters: int) -> int:
@@ -109,8 +88,7 @@ class ScopeGenerator:
         hundred million times before the question arises. A narrower marker
         is a deliberate choice, and this is how to see what it costs.
         """
-        counter_letters = max(1, letters // 2)
-        return _BASE**counter_letters
+        return LetterCode.capacity(max(1, letters // 2))
 
     @staticmethod
     def _draw(letters: int) -> str:
@@ -122,7 +100,7 @@ class ScopeGenerator:
         result.
         """
         bits = max(8, letters * 5)
-        return encode(secrets.randbits(bits), letters)
+        return LetterCode.encode(secrets.randbits(bits), letters)
 
 
 # One per process, built at import. A generator per vault would defeat the

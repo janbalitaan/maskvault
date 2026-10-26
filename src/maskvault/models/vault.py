@@ -10,7 +10,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import hashlib
 import re
-import string
 import threading
 import time
 
@@ -18,6 +17,7 @@ from maskvault.constants import SCOPE_LETTERS, WIPE_AFTER_SECONDS
 from maskvault.exceptions import VaultError
 from maskvault.models.token_format import TokenFormat
 from maskvault.scopes import GENERATOR
+from maskvault.utils.letters import LetterCode
 
 
 @dataclass
@@ -237,13 +237,7 @@ class Vault:
                 "for an unscoped vault use Vault() instead"
             )
         digest = hashlib.blake2b(key.encode("utf-8"), digest_size=32).digest()
-        number = int.from_bytes(digest, "big")
-        alphabet = string.ascii_uppercase
-        marker = []
-        for _ in range(letters):
-            number, index = divmod(number, len(alphabet))
-            marker.append(alphabet[index])
-        return "".join(marker)
+        return LetterCode.encode(int.from_bytes(digest, "big"), letters)
 
     @staticmethod
     def _new_scope(letters: int = SCOPE_LETTERS) -> str:
