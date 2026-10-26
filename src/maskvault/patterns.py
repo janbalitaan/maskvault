@@ -89,6 +89,40 @@ IP_ADDRESS = re.compile(
     r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b"
 )
 
+# IPv6, in the forms RFC 4291 allows: the full eight groups, and every
+# position a `::` can elide them from. Written as an explicit alternation
+# rather than something shorter and looser, for two reasons.
+#
+# A loose `(?:[0-9A-Fa-f]{1,4}:){2,7}…` matches `14:02:11` — a timestamp
+# becomes an address, and a reversible token replaces a time in a log line.
+# And each branch here has a bounded repeat with no nesting, so there is no
+# input that makes the matcher backtrack catastrophically.
+_HEX_GROUP = "[0-9A-Fa-f]{1,4}"
+# The dotted-quad tail of an IPv4-mapped or IPv4-embedded address. Its own
+# constant because the two branches that use it come *first* in the
+# alternation: a hex-only branch matches `::ffff:10` and stops, leaving
+# `.0.0.1` in the text — part of an address published in the clear, which is
+# worse than not matching at all.
+_V4_TAIL = r"(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
+IPV6_ADDRESS = re.compile(
+    # Character-class boundaries rather than `\b`. A `\b` at the start cannot
+    # match before a colon, so `::1` and `::ffff:0:0` — the loopback and the
+    # IPv4-mapped form — were missed entirely.
+    r"(?<![0-9A-Fa-f:])(?:"
+    rf"::(?:ffff(?::0{{1,4}})?:)?{_V4_TAIL}"
+    rf"|(?:{_HEX_GROUP}:){{1,4}}:{_V4_TAIL}"
+    rf"|(?:{_HEX_GROUP}:){{7}}{_HEX_GROUP}"
+    rf"|(?:{_HEX_GROUP}:){{1,7}}:"
+    rf"|(?:{_HEX_GROUP}:){{1,6}}:{_HEX_GROUP}"
+    rf"|(?:{_HEX_GROUP}:){{1,5}}(?::{_HEX_GROUP}){{1,2}}"
+    rf"|(?:{_HEX_GROUP}:){{1,4}}(?::{_HEX_GROUP}){{1,3}}"
+    rf"|(?:{_HEX_GROUP}:){{1,3}}(?::{_HEX_GROUP}){{1,4}}"
+    rf"|(?:{_HEX_GROUP}:){{1,2}}(?::{_HEX_GROUP}){{1,5}}"
+    rf"|{_HEX_GROUP}:(?::{_HEX_GROUP}){{1,6}}"
+    rf"|:(?:(?::{_HEX_GROUP}){{1,7}}|:)"
+    r")(?![0-9A-Fa-f:.])"
+)
+
 MAC_ADDRESS = re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b")
 
 PASSPORT = re.compile(r"(?i)\bpassport\s*(?:no\.?|number|#)?\s*[:=]?\s*([A-Z0-9]{6,9})\b")
@@ -156,11 +190,23 @@ EMPLOYEE_ID = re.compile(
     r"\s*[:=]?\s*([A-Z0-9][A-Z0-9-]{3,14})\b"
 )
 
+# A salary keyword, then an amount. The amount's comma groups used to be
+# mandatory — `\d{1,3}(?:,\d{3})+` — so `salary is 95000 USD` matched
+# nothing while `salary of $95,000` matched. Most systems write the plain
+# integer, so the common form was the one going out in the clear.
+#
+# A currency marker is optional and may sit on either side, because `$95,000`
+# and `95000 USD` are both ordinary. Four or more digits are required without
+# commas, so a keyword followed by a small number — "rate 3", "offer 12" — is
+# not read as pay.
+_CURRENCY = r"(?:[$£€₱¥]|usd|eur|gbp|php|inr|sgd|aud)"
 SALARY = re.compile(
     r"(?i)(?:(?:salary|compensation|pay|rate|earn(?:s|ing|ed)?|income|"
     r"package|offer)\D{0,16})"
-    r"(?:[$£€₱¥]|usd|eur|gbp|php|inr|sgd|aud)?\s?"
-    r"\d{1,3}(?:,\d{3})+(?:\.\d{2})?(?:\s?(?:k|per\s+\w+|/\w+|a\s+year|annually|pa))?"
+    rf"{_CURRENCY}?\s?"
+    r"(?:\d{1,3}(?:,\d{3})+|\d{4,9})(?:\.\d{2})?"
+    rf"(?:\s?{_CURRENCY})?"
+    r"(?:\s?(?:k|per\s+\w+|/\w+|a\s+year|annually|pa))?"
 )
 
 SOCIAL_HANDLE = re.compile(

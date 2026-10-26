@@ -75,6 +75,15 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
+- IPv6 detection. `IP_ADDRESS` is IPv4 only, so there was no IPv6 pattern to
+  miss with — an IPv6 host went out in the clear at every level and nothing
+  failed. Covers the compressed forms and the IPv4-embedded ones, where a
+  hex-only match would have taken `::ffff:10` and left `.0.0.1` in the text.
+  Runs before the IPv4 detector so the more specific shape claims the span.
+- The salary pattern matches a plainly written amount. `\d{1,3}(?:,\d{3})+`
+  made the comma group mandatory, so `salary is 95000 USD` matched nothing
+  while `salary of $95,000` matched — and the plain integer is the common
+  form. A currency marker may now sit on either side of the amount.
 - `Vault.wipe(older_than=...)`, which forgets the values a vault has
   finished with and reports how many went. Selective by age rather than
   all-or-nothing, because a long conversation keeps needing its recent values

@@ -14,6 +14,7 @@ from maskvault.patterns import (
     DATE_OF_BIRTH,
     IBAN,
     IP_ADDRESS,
+    IPV6_ADDRESS,
     MAC_ADDRESS,
     NATIONAL_ID,
     PASSPORT,
@@ -30,6 +31,15 @@ PERSONAL_DATA: tuple[Detector, ...] = (
     Detector(
         label="iban",
         pattern=IBAN,
+        action=Action.REVERSIBLE,
+    ),
+    Detector(
+        label="ipv6_address",
+        # Before ip_address, so the more specific shape claims the span: an
+        # IPv4-mapped address like ::ffff:10.0.0.1 contains an IPv4 address,
+        # and the v4 detector would otherwise take the tail and leave the
+        # prefix behind.
+        pattern=IPV6_ADDRESS,
         action=Action.REVERSIBLE,
     ),
     Detector(
