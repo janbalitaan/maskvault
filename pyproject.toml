@@ -77,6 +77,13 @@ ignore = ["D107", "D203", "D213"]
 # them behind a second type to learn, and the argument-count rule cannot
 # tell a wide keyword surface from a long positional one.
 "src/maskvault/levels.py" = ["PLR0913"]
+# Each option is an independent property of the traversal — which keys to
+# include, whether to stringify numbers, which keys to skip, how deep to go.
+# They are keyword-only, so there is no positional order to get wrong, and
+# the argument-count rule cannot tell a wide keyword surface from a long
+# positional one.
+"src/maskvault/structured/__init__.py" = ["PLR0913"]
+"src/maskvault/structured/walker.py" = ["PLR0913"]
 # S608 flags SQL built by interpolation, and it is right that this file does
 # it: a table name and a parameter marker cannot be bound parameters, so both
 # are interpolated. Both are also validated first — the table against

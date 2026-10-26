@@ -154,11 +154,37 @@ type of data passing through. `stringify_numbers=True` opts in.
 `bytes` is skipped entirely — it is a `Sequence`, and walking one would turn a
 blob into a list of integers.
 
-## Depth is capped, not detected
+## Depth is bounded, and exceeding it raises
 
-A structure 64 levels deep stops being walked rather than raising. A cycle is
-not detected; the cap is what stops the recursion, because cycle detection at
-every node costs more than it saves.
+A structure deeper than 64 levels raises `StructureError` rather than
+returning what was walked so far. The earlier behaviour returned the node
+unchanged at the cap, which meant a structure eighty levels deep had every
+value below sixty-four pass through in the clear — empty vault, successful
+return, nothing said.
+
+A structure that refers to itself raises too, and says which problem it is.
+At the cap a cycle put a reference to the *original object* in the output,
+real values and all.
+
+Raise the limit if a structure is genuinely that deep:
+
+```python
+anonymize_data(payload, anonymizer, max_depth=200)
+```
+
+Restoring still stops quietly at the cap, because the failure there is
+different: an unrestored token is a token, which `leaked()` reports.
+
+## Text in bytes is decoded as UTF-8
+
+Bytes that decode are scanned like any string, so a request body read in
+binary mode is covered. Bytes that do not decode are binary — an image, a
+compressed blob, a key — and are left alone: they cannot hold a readable
+email address, and guessing at another encoding would be more likely to
+corrupt them than to find anything.
+
+**Text in a non-UTF-8 encoding is the gap this leaves.** Decode it yourself
+before anonymizing.
 
 ## Terms are literal and word-bounded
 

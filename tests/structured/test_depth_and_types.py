@@ -7,8 +7,11 @@ sides: deep enough still works, too deep stops rather than crashing.
 
 from __future__ import annotations
 
+import pytest
+
 from maskvault import Anonymizer, Level, anonymize_data, restore_data
 from maskvault.constants import MAX_STRUCTURE_DEPTH
+from maskvault.exceptions import StructureError
 from maskvault.structured.sampler import TextSampler
 
 
@@ -26,12 +29,37 @@ class TestTheDepthCap:
         _, vault = anonymize_data(data, Anonymizer())
         assert vault.replaced == 1
 
-    def test_a_structure_past_the_cap_stops_rather_than_crashing(self):
-        """Returning the node untouched is the safe answer: the alternative
-        is a RecursionError taking the caller's request down with it."""
+    def test_a_structure_past_the_cap_raises(self):
+        """Returning the node untouched was *not* the safe answer.
+
+        It was the unsafe one: a structure eighty levels deep had everything
+        below sixty-four returned as it came in, so the values there passed
+        through in the clear with an empty vault and a successful return.
+        Nothing said so. A privacy filter that silently stops filtering is
+        the one failure worth refusing outright.
+        """
         data = nest(MAX_STRUCTURE_DEPTH + 10, "write to me@acme.com")
-        safe, _ = anonymize_data(data, Anonymizer())
-        assert safe is not None
+        with pytest.raises(StructureError, match="deeper than"):
+            anonymize_data(data, Anonymizer())
+
+    def test_the_value_below_the_cap_was_leaking(self):
+        """The regression itself, stated as a test."""
+        data = nest(MAX_STRUCTURE_DEPTH + 10, "write to me@acme.com")
+        with pytest.raises(StructureError):
+            anonymize_data(data, Anonymizer())
+
+    def test_the_caller_can_raise_the_limit(self):
+        """For a structure that is genuinely this deep."""
+        data = nest(MAX_STRUCTURE_DEPTH + 10, "write to me@acme.com")
+        safe, vault = anonymize_data(data, Anonymizer(), max_depth=MAX_STRUCTURE_DEPTH + 20)
+        assert len(vault.values) == 1
+        assert "me@acme.com" not in repr(safe)
+
+    def test_a_structure_within_the_cap_is_unaffected(self):
+        data = nest(10, "write to me@acme.com")
+        safe, vault = anonymize_data(data, Anonymizer())
+        assert len(vault.values) == 1
+        assert "me@acme.com" not in repr(safe)
 
     def test_restoring_past_the_cap_also_stops(self):
         data = nest(MAX_STRUCTURE_DEPTH + 10, "!|EMAIL_1|!")
@@ -69,9 +97,11 @@ class TestLeavesThatAreNotStrings:
 
     def test_bytes_are_not_walked_as_a_sequence(self):
         """Bytes are a Sequence, and iterating one yields integers — walking
-        it would turn a blob into a list of numbers."""
+        it that way would turn a blob into a list of numbers. They are
+        decoded and scanned as text instead."""
         safe, _ = anonymize_data({"blob": b"me@acme.com"}, Anonymizer())
-        assert safe["blob"] == b"me@acme.com"
+        assert isinstance(safe["blob"], bytes)
+        assert b"me@acme.com" not in safe["blob"]
 
     def test_a_set_is_handled(self):
         safe, vault = anonymize_data({"emails": {"me@acme.com"}}, Anonymizer())

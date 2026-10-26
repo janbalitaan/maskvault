@@ -34,6 +34,7 @@ from __future__ import annotations
 from typing import Any
 
 from maskvault.anonymizer import Anonymizer
+from maskvault.constants import MAX_STRUCTURE_DEPTH
 from maskvault.formats import TokenFormats
 from maskvault.models.vault import Vault
 from maskvault.structured.restorer import Restorer
@@ -50,12 +51,20 @@ def anonymize_data(
     include_keys: bool = False,
     stringify_numbers: bool = False,
     skip_keys: frozenset[str] | None = None,
+    max_depth: int = MAX_STRUCTURE_DEPTH,
 ) -> tuple[Any, Vault]:
     """Walk a structure, replacing sensitive values, and return it with a vault.
 
     `skip_keys` names keys whose values pass through untouched — useful for
     an id or a timestamp that a downstream system matches on and that would
     break if tokenized.
+
+    `max_depth` bounds the recursion. Past it this **raises** rather than
+    returning what it has: the earlier behaviour returned the node unchanged,
+    so a structure eighty levels deep had everything below sixty-four pass
+    through in the clear, with an empty vault and a successful return. A
+    structure that refers to itself raises too, and says so — the output
+    otherwise held a reference to the original object with its real values.
     """
     token_format = anonymizer.token_format or TokenFormats.choose_format(
         TextSampler.sample(data)
@@ -67,6 +76,7 @@ def anonymize_data(
         include_keys=include_keys,
         stringify_numbers=stringify_numbers,
         skip_keys=skip_keys or frozenset(),
+        max_depth=max_depth,
     )
     return walker.walk(data, depth=0), vault
 

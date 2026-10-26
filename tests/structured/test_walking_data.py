@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from maskvault import Anonymizer, Level, anonymize_data, restore_data
+from maskvault.exceptions import StructureError
 
 
 @pytest.fixture
@@ -88,13 +89,32 @@ class TestWalkingData:
         assert safe == {}
         assert vault.replaced == 0
 
-    def test_a_cycle_does_not_hang(self, anonymizer):
-        """Depth is capped rather than cycles detected, because the cap is
-        cheaper than checking every node and the failure is the same."""
+    def test_a_cycle_is_refused(self, anonymizer):
+        """The failure was *not* the same as hitting the depth cap.
+
+        At the cap the walker returned the node — and for a cycle that node
+        is the original object, so the output held a live reference to it
+        with every real value still in place. Detected and refused now, with
+        a message that says which problem it is.
+        """
         data: dict = {"name": "me@acme.com"}
         data["self"] = data
-        safe, _ = anonymize_data(data, anonymizer)
-        assert safe["name"] != "me@acme.com"
+        with pytest.raises(StructureError, match="refers to itself"):
+            anonymize_data(data, anonymizer)
+
+    def test_the_same_object_twice_is_not_a_cycle(self, anonymizer):
+        """Only the current path is tracked, so a structure that legitimately
+        holds one object in two places still walks."""
+        shared = {"email": "me@acme.com"}
+        safe, vault = anonymize_data({"a": shared, "b": shared}, anonymizer)
+        assert "me@acme.com" not in repr(safe)
+        assert len(vault.values) == 1
+
+    def test_a_cycle_through_a_list_is_also_refused(self):
+        inner: list = ["me@acme.com"]
+        inner.append(inner)
+        with pytest.raises(StructureError, match="refers to itself"):
+            anonymize_data({"items": inner}, Anonymizer())
 
     def test_credentials_are_still_destroyed(self, anonymizer):
         safe, vault = anonymize_data({"config": {"key": "AKIAIOSFODNN7EXAMPLE"}}, anonymizer)

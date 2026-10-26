@@ -35,16 +35,47 @@ class Restorer:
     def restore(self, data: Any, depth: int = 0) -> Any:
         """Restore one node, recursing into containers."""
         if depth > MAX_STRUCTURE_DEPTH:
+            # Unchanged is safe here, unlike in the walker: an unrestored
+            # token is a token, which `leaked()` reports. The walker returning
+            # a node unchanged meant real values passing through unexamined.
             return data
-        if isinstance(data, str):
-            return self._anonymizer.restore(data, self._vault)
+        # Order is the contract. `str` before `Sequence` because a string is
+        # one and walking it character by character restores nothing; `bytes`
+        # before `Sequence` for the same reason, a byte string being a
+        # sequence of integers.
+        if isinstance(data, (str, bytes, bytearray)):
+            return self._leaf(data)
         if isinstance(data, Mapping):
             return self._mapping(data, depth)
         if isinstance(data, (set, frozenset)):
             return self._set(data, depth)
-        if isinstance(data, Sequence) and not isinstance(data, bytes):
+        if isinstance(data, Sequence):
             return self._sequence(data, depth)
         return data
+
+    def _leaf(self, data: str | bytes | bytearray) -> str | bytes | bytearray:
+        """Restore a text leaf, whether it arrived as text or as bytes."""
+        if isinstance(data, str):
+            return self._anonymizer.restore(data, self._vault)
+        return self._bytes(data)
+
+    def _bytes(self, data: bytes | bytearray) -> bytes | bytearray:
+        """Restore inside bytes that hold text.
+
+        The mirror of the walker's handler. Without this the walk masked a
+        byte string and the restore could not undo it, which is worse than
+        not masking it at all: the value was in the vault, the token was in
+        the payload, and the caller got neither back.
+
+        Bytes that do not decode as UTF-8 were never scanned, so there is
+        nothing in them to restore.
+        """
+        try:
+            text = bytes(data).decode("utf-8")
+        except UnicodeDecodeError:
+            return data
+        restored = self._anonymizer.restore(text, self._vault).encode("utf-8")
+        return bytearray(restored) if isinstance(data, bytearray) else restored
 
     def _mapping(self, data: Mapping, depth: int) -> dict:
         """Restore a mapping, handling keys only where they were replaced."""

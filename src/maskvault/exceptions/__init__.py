@@ -17,6 +17,7 @@ more specific type is never a breaking change.
 
 from maskvault.exceptions.base import MaskvaultError
 from maskvault.exceptions.detector import DetectorError
+from maskvault.exceptions.structure import StructureError
 from maskvault.exceptions.token_format import TokenFormatError
 from maskvault.exceptions.vault import VaultError
 from maskvault.exceptions.whitelist import WhitelistError
@@ -24,6 +25,7 @@ from maskvault.exceptions.whitelist import WhitelistError
 __all__ = [
     "DetectorError",
     "MaskvaultError",
+    "StructureError",
     "TokenFormatError",
     "VaultError",
     "WhitelistError",

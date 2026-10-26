@@ -75,6 +75,21 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
+- A structure deeper than the walk limit now raises `StructureError` instead
+  of being returned unchanged. The old behaviour was a silent leak: a
+  structure eighty levels deep had every value below sixty-four pass through
+  in the clear, with an empty vault and a successful return. `max_depth` on
+  `anonymize_data` raises the limit for a structure that is genuinely that
+  deep.
+- A structure that refers to itself is detected and refused, naming the
+  problem. At the depth limit a cycle put a reference to the *original
+  object* into the output — real values and all. The same object appearing
+  twice side by side is still walked, because only the current path is
+  tracked.
+- Text inside `bytes` and `bytearray` is anonymized and restored. Bytes had
+  no handler, so a request body read in binary mode carried its email
+  addresses out in the clear while the strings beside it were masked. Bytes
+  that do not decode as UTF-8 are left alone, being binary rather than text.
 - Four false positives fixed, found by measuring ordinary engineering prose
   rather than by reading the patterns. Over-masking costs what under-masking
   does: a value replaced by a token is one the model cannot reason about.
