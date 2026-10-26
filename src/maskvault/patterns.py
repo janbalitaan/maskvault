@@ -179,10 +179,18 @@ BANK_ACCOUNT = re.compile(
     r"(?:no\.?|number|#)?\s*[:=]?\s*([A-Z0-9][A-Z0-9 -]{5,20})\b"
 )
 
+# The keyword is case-insensitive; the value is not. `(?i)` over the whole
+# pattern made `[A-Z0-9 -]` match lowercase too, so "policy allows 3 retries"
+# captured "allows 3 retries" as a policy number — the keyword is a common
+# English word and everything after it matched.
+#
+# The value must also contain a digit. An identifier does; a run of words
+# does not, and that single requirement is what separates `POLICY AB1234`
+# from `policy requires review`.
 POLICY_NUMBER = re.compile(
-    r"(?i)\b(?:policy|member|patient|medical\s*record|mrn|insurance|"
-    r"medicare|medicaid|philhealth|nhs)\s*(?:no\.?|number|id|#)?\s*"
-    r"[:=]?\s*([A-Z0-9][A-Z0-9 -]{4,18})\b"
+    r"\b(?i:policy|member|patient|medical\s*record|mrn|insurance|"
+    r"medicare|medicaid|philhealth|nhs)\s*(?i:no\.?|number|id|#)?\s*"
+    r"[:=]?\s*((?=[A-Z0-9 -]*\d)[A-Z0-9][A-Z0-9 -]{4,18})\b"
 )
 
 EMPLOYEE_ID = re.compile(

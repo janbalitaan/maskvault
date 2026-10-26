@@ -57,7 +57,12 @@ from maskvault.vocabularies import SPECIAL_CATEGORIES
 # Structured identifiers
 # ---------------------------------------------------------------------------
 
-STRUCTURED_PERSONAL: tuple[Detector, ...] = (
+# Identifiers introduced by a keyword — `policy`, `MRN`, `tax id`, `salary`.
+# Each one names what follows it, which makes them more precise than a
+# detector that has to judge a bare value, so they run before the contact
+# details. `Policy No: 9988776655` was otherwise claimed by the phone
+# detector and labelled PHONE.
+KEYWORD_IDENTIFIERS: tuple[Detector, ...] = (
     Detector(
         label="street_address",
         # A number followed by a street word. Deliberately conservative: it
@@ -127,6 +132,13 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
         pattern=SALARY,
         action=Action.REVERSIBLE,
     ),
+)
+
+# Personal data recognized from a looser shape. These run *after* the contact
+# details: `social_handle` is "a platform name followed by something", so put
+# it first and it claims `telegram.org` out of `me@telegram.org` and
+# `discord.com` out of a URL.
+LOOSE_PERSONAL: tuple[Detector, ...] = (
     Detector(
         label="social_handle",
         pattern=SOCIAL_HANDLE,
@@ -140,6 +152,11 @@ STRUCTURED_PERSONAL: tuple[Detector, ...] = (
         group=1,
     ),
 )
+
+# The two halves together, in their original order. Kept because it is a
+# published name, and because "every structured personal detector" remains a
+# useful thing to ask for even though the levels now place the halves apart.
+STRUCTURED_PERSONAL: tuple[Detector, ...] = KEYWORD_IDENTIFIERS + LOOSE_PERSONAL
 
 
 # ---------------------------------------------------------------------------

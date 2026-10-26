@@ -75,6 +75,26 @@ First release.
   tested against implementations that inherit nothing from this library,
   because a Protocol is only open as long as nothing on the path does an
   `isinstance` check.
+- Four false positives fixed, found by measuring ordinary engineering prose
+  rather than by reading the patterns. Over-masking costs what under-masking
+  does: a value replaced by a token is one the model cannot reason about.
+  - A bare seven-digit integer was read as a phone number, so `1048576 bytes`
+    and `1000000 entries` became reversible tokens. A bare run now needs ten
+    digits, which is where national numbers start once a trunk prefix or area
+    code is included; `09175551234` and `4155550132` still match, and an
+    explicit `PhoneShape.bounded()` still governs.
+  - An ISBN-13 was read as an international number. The 978/979 prefix is
+    what separates the two shapes.
+  - `policy allows 3 retries` was read as a policy number: `(?i)` covered the
+    value class as well as the keyword, so `[A-Z0-9 -]` matched lowercase and
+    everything after a common English word matched. The value is now
+    case-sensitive and must contain a digit.
+  - `Policy No: 9988776655` was labelled PHONE. Protected, but a caller
+    whitelisting `policy_number` found it had no effect. The keyword-led
+    identifiers now run before the contact details, as
+    `KEYWORD_IDENTIFIERS`; `social_handle` and `age` stay after them as
+    `LOOSE_PERSONAL`, because putting `social_handle` first claims
+    `telegram.org` out of `me@telegram.org`.
 - IPv6 detection. `IP_ADDRESS` is IPv4 only, so there was no IPv6 pattern to
   miss with — an IPv6 host went out in the clear at every level and nothing
   failed. Covers the compressed forms and the IPv4-embedded ones, where a

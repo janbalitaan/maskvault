@@ -22,6 +22,18 @@ _DATE_OR_TIME = re.compile(
 )
 
 
+# An ISBN-13 carries thirteen digits in hyphenated groups, which is exactly
+# the shape of an international number. The `978`/`979` prefix is what tells
+# them apart, and a bibliography should not come back tokenized.
+_ISBN = re.compile(r"\b97[89][\d -]{10,14}\d\b")
+
+# A run of nothing but digits, with no punctuation and no country prefix.
+_BARE_DIGITS = re.compile(r"\d+")
+
+# How many digits a bare run needs before it is treated as dialable.
+_BARE_PHONE_MIN_DIGITS = 10
+
+
 class PhoneShape:
     """Decides whether a digit run is plausibly a phone number.
 
@@ -37,6 +49,7 @@ class PhoneShape:
         candidate: str,
         minimum: int = PHONE_MIN_DIGITS,
         maximum: int = PHONE_MAX_DIGITS,
+        bare_minimum: int | None = None,
     ) -> bool:
         """Return whether a digit run is plausibly a phone number.
 
@@ -48,8 +61,30 @@ class PhoneShape:
         stripped = candidate.strip(" .,;:")
         if _DATE_OR_TIME.search(stripped):
             return False
+        if _ISBN.search(stripped):
+            return False
         digits = sum(character.isdigit() for character in stripped)
-        return minimum <= digits <= maximum
+        if not minimum <= digits <= maximum:
+            return False
+        # A bare run of digits — no `+`, no separator — needs to be long
+        # enough to be a number somebody could dial. `1048576` and `1000000`
+        # are seven digits and were read as phone numbers; a file size and a
+        # row count became reversible tokens, and the model lost the figures
+        # it was being asked about.
+        #
+        # Ten is the bar because that is where national numbers start once a
+        # trunk prefix or area code is included: `09175551234` and
+        # `4155550132` still match, while a bare seven- to nine-digit integer
+        # is far more often a count, a size or an identifier.
+        if _BARE_DIGITS.fullmatch(stripped):
+            # A caller who set the bounds themselves meant them: `bounded(6,
+            # 12)` for a region with six-digit extensions should not then be
+            # overruled by a default meant for international numbers. So the
+            # bare bar follows explicit bounds and only applies the stricter
+            # default when none were given.
+            bar = _BARE_PHONE_MIN_DIGITS if bare_minimum is None else bare_minimum
+            return digits >= bar
+        return True
 
     @staticmethod
     def bounded(minimum: int, maximum: int) -> Callable[[str], bool]:
@@ -75,6 +110,10 @@ class PhoneShape:
             )
 
         def validate(candidate: str) -> bool:
-            return PhoneShape.looks_like_a_phone_number(candidate, minimum, maximum)
+            # `bare_minimum=minimum`: a caller naming 6 digits accepts a bare
+            # six-digit run, which is the whole point of widening the bounds.
+            return PhoneShape.looks_like_a_phone_number(
+                candidate, minimum, maximum, bare_minimum=minimum
+            )
 
         return validate

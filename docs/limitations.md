@@ -82,6 +82,37 @@ if leftover := anonymizer.leaked(answer, vault):
 
 That check is not optional in a production path.
 
+## Some values are genuinely ambiguous
+
+Over-masking costs as much as under-masking. A value replaced by a token is a
+value the model cannot reason about, so a log line whose byte count became
+`!|PHONE_1|!` is a question the assistant can no longer answer — and the
+reader has no idea why.
+
+Measured against twenty sentences of ordinary engineering prose, one is still
+touched at every level:
+
+```
+"Room 221B has 14 chairs and seats 42 people."   ->   UNIT_NUMBER
+```
+
+`Room 221B` in an address *is* a unit number. In that sentence it is a
+meeting room. No pattern separates them, because the difference is meaning
+rather than shape. The same holds for a bare ten-digit integer: `1073741824`
+is a gibibyte and also the length of a phone number.
+
+Where it matters, say so:
+
+```python
+Anonymizer(whitelist={"patterns": [r"\bRoom \w+ has\b", r"\d+ bytes\b"]})
+```
+
+Four others were fixed rather than documented, because they were defects and
+not ambiguity: a bare seven-digit integer read as a phone number, an ISBN
+read as one, `policy allows 3 retries` read as a policy number, and
+`Policy No: 9988776655` labelled PHONE — protected, but under a label a
+caller whitelisting `policy_number` would never reach.
+
 ## Vocabulary detection produces false positives
 
 The special categories are word lists, because there is no *shape* to a

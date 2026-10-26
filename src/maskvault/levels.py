@@ -31,7 +31,11 @@ from maskvault.detectors.vendor import VENDOR_CREDENTIALS
 from maskvault.models.action import Action
 from maskvault.models.detector import Detector
 from maskvault.models.level import Level
-from maskvault.personal import STRUCTURED_PERSONAL, SpecialCategories
+from maskvault.personal import (
+    KEYWORD_IDENTIFIERS,
+    LOOSE_PERSONAL,
+    SpecialCategories,
+)
 
 
 class Levels:
@@ -97,8 +101,21 @@ class Levels:
             VENDOR_CREDENTIALS
             + Levels._credentials_only()[len(VENDOR_CREDENTIALS) :]
             + PERSONAL_DATA
+            # Keyword-led identifiers before the contact details, which is
+            # the same "precise before loose" rule one line up. `policy`,
+            # `MRN` and `tax id` each name what follows them, while `phone`
+            # matches any punctuated digit run and decides in code — so
+            # `Policy No: 9988776655` was claimed by phone and labelled
+            # PHONE. The value was still protected, but a caller
+            # whitelisting "policy_number" found it had no effect.
+            #
+            # Only the keyword-led half moves. `social_handle` is "a platform
+            # name followed by something", which is looser than an email
+            # address or a URL — put it first and it claims `telegram.org`
+            # out of `me@telegram.org`.
+            + KEYWORD_IDENTIFIERS
             + contact
-            + STRUCTURED_PERSONAL
+            + LOOSE_PERSONAL
         )
 
         if level is Level.STANDARD:
